@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: sr-mess-api
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sr-mess-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: https://sr-mess-frontend.onrender.com
+      - key: PYTHON_VERSION
+        value: 3.11
+
+databases:
+  - name: sr-mess-db
+    databaseName: mess
+    plan: free
