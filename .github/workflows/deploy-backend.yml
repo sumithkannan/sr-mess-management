@@ -6,6 +6,11 @@ on:
     paths:
       - 'backend/**'
   workflow_dispatch:
+    inputs:
+      full_deploy:
+        description: 'Upload every backend file instead of only what changed'
+        type: boolean
+        default: false
 
 concurrency:
   group: deploy-pythonanywhere
@@ -15,10 +20,12 @@ jobs:
   deploy:
     name: Upload and reload
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - uses: actions/setup-python@v5
         with:
@@ -40,6 +47,20 @@ jobs:
           fi
           echo "safe to upload"
 
+      - name: Work out which files changed
+        id: scope
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.full_deploy }}" = "true" ] || ! git rev-parse --verify --quiet HEAD^; then
+            git ls-files backend | grep -v '^backend/tests/' > changed.txt
+            echo "mode=full" >> "$GITHUB_OUTPUT"
+          else
+            git diff --name-only HEAD^ HEAD -- backend | grep -v '^backend/tests/' > changed.txt || true
+            echo "mode=changed" >> "$GITHUB_OUTPUT"
+          fi
+          echo "upload count: $(wc -l < changed.txt)"
+          cat changed.txt
+
       - name: Upload backend and reload site
         id: deploy
         env:
@@ -49,9 +70,43 @@ jobs:
         run: |
           python - <<'PY'
           import os
+          import pathlib
+          import re
+          import sys
+          import time
 
+          from pythonanywhere_core.exceptions import PythonAnywhereApiException
           from pythonanywhere_core.files import Files
           from pythonanywhere_core.website import Website
+
+          # The Files API throttles bursts with HTTP 429. Keep a floor between
+          # requests and back off using the retry delay the API suggests.
+          MIN_INTERVAL = 0.45
+          _last_call = 0.0
+
+          def throttle():
+              global _last_call
+              gap = time.monotonic() - _last_call
+              if gap < MIN_INTERVAL:
+                  time.sleep(MIN_INTERVAL - gap)
+              _last_call = time.monotonic()
+
+          def upload(files_api, local_path, remote_path, attempts=5):
+              payload = pathlib.Path(local_path).read_bytes()
+              for attempt in range(1, attempts + 1):
+                  throttle()
+                  try:
+                      files_api.path_post(remote_path, payload)
+                      return
+                  except PythonAnywhereApiException as exc:
+                      message = str(exc)
+                      if "429" not in message:
+                          raise
+                      match = re.search(r"available in (\d+) seconds", message)
+                      wait = int(match.group(1)) + 2 if match else 5 * attempt
+                      print(f"    429 on {remote_path} — retry {attempt}/{attempts} in {wait}s", flush=True)
+                      time.sleep(wait)
+              raise SystemExit(f"::error::gave up uploading {remote_path}")
 
           user = os.environ["PYTHONANYWHERE_USERNAME"].strip()
 
@@ -64,24 +119,42 @@ jobs:
               if site.startswith("eu")
               else f"{user}.pythonanywhere.com"
           )
-          remote = f"/home/{user}/sr-mess-management/backend"
+          repo_root = f"/home/{user}/sr-mess-management"
 
           print(f"username : {user}")
           print(f"site     : {site}")
           print(f"domain   : {domain}")
-          print(f"remote   : {remote}")
+          print(f"repo root: {repo_root}")
 
-          Files().tree_post("backend", remote)
-          print("upload   : ok")
+          changed = [
+              line.strip()
+              for line in pathlib.Path("changed.txt").read_text().splitlines()
+              if line.strip()
+          ]
+          if not changed:
+              print("no backend files changed — skipping upload")
 
-          Website().reload(domain)
-          print("reload   : ok")
+          files_api = Files()
+          for index, relative in enumerate(changed, start=1):
+              local = pathlib.Path(relative)
+              if not local.is_file():
+                  print(f"  {index}/{len(changed)} skip (missing): {relative}")
+                  continue
+              remote = f"{repo_root}/{relative}"
+              upload(files_api, str(local), remote)
+              print(f"  {index}/{len(changed)} ok: {relative}", flush=True)
+
+          if changed:
+              Website().reload(domain)
+              print("reload   : ok")
 
           with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
               fh.write(f"domain={domain}\n")
+              fh.write(f"count={len(changed)}\n")
           PY
 
       - name: Health check
+        if: steps.deploy.outputs.count != '0'
         env:
           PA_DOMAIN: ${{ steps.deploy.outputs.domain }}
         run: |
@@ -102,6 +175,7 @@ jobs:
         if: always()
         env:
           PA_DOMAIN: ${{ steps.deploy.outputs.domain }}
+          FILE_COUNT: ${{ steps.deploy.outputs.count }}
         run: |
           {
             echo "### Backend deploy — ${PA_DOMAIN}"
@@ -109,10 +183,11 @@ jobs:
             echo "| | |"
             echo "|---|---|"
             echo "| commit | \`${GITHUB_SHA}\` |"
+            echo "| files uploaded | ${FILE_COUNT} |"
+            echo "| scope | ${{ steps.scope.outputs.mode }} |"
             echo "| frontend | deployed automatically by Vercel |"
-            echo "| API | https://${PA_DOMAIN}/api/health |"
             echo ""
             echo "> Dependency changes are **not** installed automatically."
-            echo "> If \`backend/requirements.txt\` changed, run \`pip install -r backend/requirements.txt\`"
-            echo "> in a PythonAnywhere console."
+            echo "> If \`backend/requirements.txt\` changed, run"
+            echo "> \`pip install -r backend/requirements.txt\` in a PythonAnywhere console."
           } >> "$GITHUB_STEP_SUMMARY"
