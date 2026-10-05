@@ -14,6 +14,7 @@
         </button>
       </form>
       <p class="text-xs text-center text-gray-400 mt-4">Default: admin / PasswordToBeChanged</p>
+      <VersionTag />
     </div>
   </div>
 </template>
@@ -22,6 +23,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import VersionTag from '../components/VersionTag.vue'
 const auth = useAuthStore()
 const router = useRouter()
 const username = ref('')

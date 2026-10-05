@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import inspect, text
 from .database import engine, Base
-from .api import auth, users, menu, votes, attendance, ratings, mess_duty, expenses, reports, configurations, off_days
+from .api import auth, users, menu, votes, attendance, ratings, mess_duty, expenses, reports, configurations, off_days, version
 from .services.auth_service import seed_admin
 from .config import settings
 
@@ -57,6 +57,7 @@ app.include_router(expenses.router)
 app.include_router(reports.router)
 app.include_router(configurations.router)
 app.include_router(off_days.router)
+app.include_router(version.router)
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):

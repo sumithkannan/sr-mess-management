@@ -61,6 +61,19 @@ jobs:
           echo "upload count: $(wc -l < changed.txt)"
           cat changed.txt
 
+      - name: Stamp build metadata
+        run: |
+          cat > backend/deploy_stamp.json <<EOF
+          {
+            "commit": "${GITHUB_SHA}",
+            "branch": "${GITHUB_REF_NAME}",
+            "deployed_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+          # Always upload the stamp, even when no other file changed.
+          echo "backend/deploy_stamp.json" >> changed.txt
+          cat backend/deploy_stamp.json
+
       - name: Upload backend and reload site
         id: deploy
         env:

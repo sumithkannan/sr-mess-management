@@ -27,10 +27,13 @@
       class="w-full bg-red-500 text-white py-2.5 rounded text-sm hover:bg-red-600 mt-2">
       Logout
     </button>
+
+    <VersionTag />
   </div>
 </template>
 
 <script setup>
 import { useAuthStore } from '../stores/auth'
+import VersionTag from '../components/VersionTag.vue'
 const auth = useAuthStore()
 </script>
