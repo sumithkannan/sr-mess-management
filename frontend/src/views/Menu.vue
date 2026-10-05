@@ -13,37 +13,41 @@
     </div>
 
     <div class="bg-white rounded-xl border overflow-hidden">
-      <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+      <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between cursor-pointer select-none"
+        @click="dateExpanded = !dateExpanded">
         <h3 class="font-medium text-sm text-gray-500 uppercase tracking-wide">Menu for {{ formattedDate }}</h3>
         <div class="flex items-center gap-2">
           <span v-if="dateDirty" class="flex items-center gap-1 text-xs text-yellow-600">
             <span class="w-1.5 h-1.5 rounded-full bg-yellow-500"></span> Unsaved
           </span>
-          <span v-else class="text-xs text-green-600">Saved</span>
+          <span v-else-if="dateSaved" class="text-xs text-green-600">Saved</span>
+          <span class="text-xs text-gray-400">{{ dateExpanded ? '▼' : '▶' }}</span>
         </div>
       </div>
 
-      <div v-if="mealTypes.length === 0" class="px-4 py-8 text-center text-sm text-gray-400">No meal types configured.</div>
-      <div v-else class="divide-y divide-gray-50">
-        <div v-for="mt in mealTypes" :key="'d'+mt.id" class="px-4 py-3 flex items-center gap-3">
-          <span class="text-xs font-medium w-16 text-gray-600">{{ mt.name }}</span>
-          <template v-if="auth.isAdmin">
-            <input v-model="dateDrafts[mt.id]"
-              placeholder="Item name"
-              class="border rounded px-2 py-1.5 text-sm flex-1 transition-colors duration-150"
-              :class="dateFieldDirty(mt.id) ? 'border-yellow-300 bg-yellow-50' : 'border-gray-200'" />
-          </template>
-          <span v-else class="text-sm flex-1">{{ dateDrafts[mt.id] || '-' }}</span>
+      <div v-if="dateExpanded">
+        <div v-if="mealTypes.length === 0" class="px-4 py-8 text-center text-sm text-gray-400">No meal types configured.</div>
+        <div v-else class="divide-y divide-gray-50">
+          <div v-for="mt in mealTypes" :key="'d'+mt.id" class="px-4 py-3 flex items-center gap-3">
+            <span class="text-xs font-medium w-16 text-gray-600">{{ mt.name }}</span>
+            <template v-if="auth.isAdmin">
+              <input v-model="dateDrafts[mt.id]"
+                placeholder="Item name"
+                class="border rounded px-2 py-1.5 text-sm flex-1 transition-colors duration-150"
+                :class="dateFieldDirty(mt.id) ? 'border-yellow-300 bg-yellow-50' : 'border-gray-200'" />
+            </template>
+            <span v-else class="text-sm flex-1">{{ dateDrafts[mt.id] || '-' }}</span>
+          </div>
         </div>
-      </div>
 
-      <div v-if="auth.isAdmin" class="px-4 py-3 border-t border-gray-100 flex justify-end">
-        <button @click="saveDateItems"
-          class="px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150"
-          :class="dateDirty ? 'bg-yellow-500 text-white hover:bg-yellow-600 active:scale-95' : 'bg-gray-100 text-gray-400 cursor-default'"
-          :disabled="!dateDirty">
-          {{ dateDirty ? 'Save Date Menu' : 'Saved' }}
-        </button>
+        <div v-if="auth.isAdmin" class="px-4 py-3 border-t border-gray-100 flex justify-end">
+          <button @click="saveDateItems"
+            class="px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150"
+            :class="dateDirty ? 'bg-yellow-500 text-white hover:bg-yellow-600 active:scale-95' : 'bg-gray-100 text-gray-400 cursor-default'"
+            :disabled="!dateDirty">
+            Save Date Menu
+          </button>
+        </div>
       </div>
     </div>
 
@@ -53,7 +57,7 @@
         <span v-if="recurringDirty" class="flex items-center gap-1 text-xs text-yellow-600">
           <span class="w-1.5 h-1.5 rounded-full bg-yellow-500"></span> Unsaved
         </span>
-        <span v-else class="text-xs text-green-600">Saved</span>
+        <span v-else-if="recurringSaved" class="text-xs text-green-600">Saved</span>
       </div>
 
       <div v-if="mealTypes.length === 0" class="px-4 py-8 text-center text-sm text-gray-400">No meal types configured.</div>
@@ -81,7 +85,7 @@
           class="px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150"
           :class="recurringDirty ? 'bg-yellow-500 text-white hover:bg-yellow-600 active:scale-95' : 'bg-gray-100 text-gray-400 cursor-default'"
           :disabled="!recurringDirty">
-          {{ recurringDirty ? 'Save Weekly Menu' : 'Saved' }}
+          Save Weekly Menu
         </button>
       </div>
     </div>
@@ -109,6 +113,9 @@ const recurringInputs = reactive({})
 const dateDrafts = reactive({})
 const dateOriginals = reactive({})
 const recurringOriginals = reactive({})
+const dateExpanded = ref(false)
+const dateSaved = ref(false)
+const recurringSaved = ref(false)
 
 const formattedDate = computed(() => {
   const d = new Date(viewDate.value + 'T00:00:00')
@@ -155,6 +162,8 @@ async function loadMenu() {
     mealTypes.value = mt.data
     dateItems.value = di.data.filter(item => item.date !== null)
     recurringItems.value = ri.data
+    dateSaved.value = false
+    recurringSaved.value = false
 
     for (const mtItem of mt.data) {
       const item = dateItems.value.find(i => i.meal_type_id === mtItem.id)
@@ -213,6 +222,7 @@ async function saveDateItems() {
   }
   try {
     await Promise.all(promises)
+    dateSaved.value = true
   } catch (e) { alert('Error: ' + (e.response?.data?.detail || e.message)) }
 }
 
@@ -242,6 +252,7 @@ async function saveRecurringItems() {
   }
   try {
     await Promise.all(promises)
+    recurringSaved.value = true
   } catch (e) { alert('Error: ' + (e.response?.data?.detail || e.message)) }
 }
 
@@ -273,6 +284,9 @@ watch(anyDirty, (v) => {
   if (v) window.addEventListener('beforeunload', warnUnsaved)
   else window.removeEventListener('beforeunload', warnUnsaved)
 })
+
+watch(dateDirty, (v) => { if (v) dateSaved.value = false })
+watch(recurringDirty, (v) => { if (v) recurringSaved.value = false })
 
 onMounted(loadMenu)
 </script>

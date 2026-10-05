@@ -4,7 +4,10 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   plugins: [vue(), tailwindcss()],
-  server: { port: 5173 },
+  server: {
+    port: 5173,
+    proxy: { '/api': 'http://localhost:8000' }
+  },
   optimizeDeps: {
     include: ['vue', 'pinia', 'vue-router', 'axios', '@vue/devtools-api'],
     noDiscovery: true
