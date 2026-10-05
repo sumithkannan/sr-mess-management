@@ -1,0 +1,118 @@
+name: Deploy backend to PythonAnywhere
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'backend/**'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-pythonanywhere
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Upload and reload
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install PythonAnywhere SDK
+        run: pip install --upgrade pythonanywhere-core
+
+      - name: Guard against committing secrets
+        run: |
+          set -euo pipefail
+          if [ -f backend/.env ]; then
+            echo "::error::backend/.env is committed — it would overwrite the live secrets."
+            exit 1
+          fi
+          if [ -d backend/venv ]; then
+            echo "::error::backend/venv is present — it would be uploaded."
+            exit 1
+          fi
+          echo "safe to upload"
+
+      - name: Upload backend and reload site
+        id: deploy
+        env:
+          API_TOKEN: ${{ secrets.PYTHONANYWHERE_API_TOKEN }}
+          PYTHONANYWHERE_USERNAME: ${{ vars.PYTHONANYWHERE_USERNAME }}
+          PYTHONANYWHERE_SITE: ${{ vars.PYTHONANYWHERE_SITE }}
+        run: |
+          python - <<'PY'
+          import os
+
+          from pythonanywhere_core.files import Files
+          from pythonanywhere_core.website import Website
+
+          user = os.environ["PYTHONANYWHERE_USERNAME"].strip()
+
+          # GitHub renders unset variables as an empty string, so an empty
+          # value must fall back to the default rather than being used as-is.
+          site = os.environ.get("PYTHONANYWHERE_SITE", "").strip() or "www.pythonanywhere.com"
+
+          domain = (
+              f"{user}.eu.pythonanywhere.com"
+              if site.startswith("eu")
+              else f"{user}.pythonanywhere.com"
+          )
+          remote = f"/home/{user}/sr-mess-management/backend"
+
+          print(f"username : {user}")
+          print(f"site     : {site}")
+          print(f"domain   : {domain}")
+          print(f"remote   : {remote}")
+
+          Files().tree_post("backend", remote)
+          print("upload   : ok")
+
+          Website().reload(domain)
+          print("reload   : ok")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
+              fh.write(f"domain={domain}\n")
+          PY
+
+      - name: Health check
+        env:
+          PA_DOMAIN: ${{ steps.deploy.outputs.domain }}
+        run: |
+          set -uo pipefail
+          for i in $(seq 1 12); do
+            if curl -fsS --retry 2 "https://${PA_DOMAIN}/api/health"; then
+              echo ""
+              echo "::notice::Deployment healthy at https://${PA_DOMAIN}"
+              exit 0
+            fi
+            echo "attempt ${i}/12 failed, waiting 5s..."
+            sleep 5
+          done
+          echo "::error::Health check failed. Check /var/log/${PA_DOMAIN}.error.log on PythonAnywhere."
+          exit 1
+
+      - name: Summary
+        if: always()
+        env:
+          PA_DOMAIN: ${{ steps.deploy.outputs.domain }}
+        run: |
+          {
+            echo "### Backend deploy — ${PA_DOMAIN}"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| commit | \`${GITHUB_SHA}\` |"
+            echo "| frontend | deployed automatically by Vercel |"
+            echo "| API | https://${PA_DOMAIN}/api/health |"
+            echo ""
+            echo "> Dependency changes are **not** installed automatically."
+            echo "> If \`backend/requirements.txt\` changed, run \`pip install -r backend/requirements.txt\`"
+            echo "> in a PythonAnywhere console."
+          } >> "$GITHUB_STEP_SUMMARY"

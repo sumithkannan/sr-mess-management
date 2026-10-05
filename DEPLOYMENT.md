@@ -218,6 +218,82 @@ Environment Variables** and redeploy.
 
 ---
 
+# Automated deploys (GitHub Actions)
+
+`.github/workflows/deploy-backend.yml` pushes every `backend/**` change to
+PythonAnywhere and reloads the site automatically.
+
+## How it works
+
+The free tier has **no SSH access** (paid-only), so the workflow cannot run
+`git pull` on PythonAnywhere. Instead it uses the PythonAnywhere API:
+
+1. Uploads the checked-out `backend/` directory via the **Files API**
+   (`Files.tree_post`)
+2. Reloads the ASGI site via the **Website API** (`Website.reload`)
+3. Polls `/api/health` to confirm the deploy is actually serving
+
+`backend/.env`, `backend/mess.db`, and `backend/venv/` are gitignored, so they
+are never uploaded and live data is safe. A guard step fails the job if
+`.env` or `venv/` is ever accidentally committed.
+
+The frontend is deployed by **Vercel** directly from GitHub — no action needed.
+
+## One-time setup
+
+**1. Add the API token as a repository secret**
+
+Repo → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
+
+| Name | Value |
+|------|-------|
+| `PYTHONANYWHERE_API_TOKEN` | your token from the PythonAnywhere **Account** page |
+
+**2. Add repository variables**
+
+**Settings** → **Secrets and variables** → **Actions** → **Variables** tab
+
+| Name | Value |
+|------|-------|
+| `PYTHONANYWHERE_USERNAME` | `sumithlals` |
+| `PYTHONANYWHERE_SITE` | `www.pythonanywhere.com` — or `eu.pythonanywhere.com` if your account is on the EU system |
+
+**3. Commit the workflow**
+
+```bash
+git add .github/workflows/deploy-backend.yml
+git commit -m "Add GitHub Actions deploy for PythonAnywhere backend"
+git push origin master
+```
+
+Check **Actions** in the repo for the run. It should end with
+`::notice::Deployment healthy`.
+
+You can also trigger it manually from the Actions tab → **Run workflow**.
+
+## ⚠️ What the workflow does NOT do
+
+**It cannot install new Python dependencies.** PythonAnywhere has no API for
+running commands, so if you change `backend/requirements.txt` you must install
+manually:
+
+```bash
+source ~/.virtualenvs/messvenv/bin/activate
+pip install -r ~/sr-mess-management/backend/requirements.txt
+```
+
+**It does not deploy the frontend.** Vercel handles that from GitHub.
+
+**It cannot edit `.env`.** Edit it in the console and run `pa website reload`.
+
+## Watch your CPU allowance
+
+The free tier allows only **100 CPU-seconds per day**. Every reload costs a few
+seconds. Dozens of deploys in a day can exhaust it, at which point the site
+stops responding until the allowance resets.
+
+---
+
 # Two things to know
 
 **1. Your site never appears on PythonAnywhere's Web tab.** No Reload button, no
