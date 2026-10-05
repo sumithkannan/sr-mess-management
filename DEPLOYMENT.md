@@ -1,276 +1,382 @@
-# Deployment Guide — SR Mess Management
+# Hosting SR Mess Management — Step by Step
 
-## Platform: PythonAnywhere (Free Tier)
-### No credit card required
+Deploy to **two free services**:
 
----
+| Piece | Service | URL |
+|-------|---------|-----|
+| Vue 3 SPA | **Vercel** (free) | `https://sr-mess.vercel.app` |
+| FastAPI + SQLite | **PythonAnywhere** (free Beginner) | `https://YOURUSERNAME.pythonanywhere.com` |
 
-## Before You Start
-
-1. Create a **GitHub** account: https://github.com/signup
-2. Create a **PythonAnywhere** account: https://www.pythonanywhere.com/registration/register/beginner/
-   - Choose the **Free** plan (no card needed)
-   - Your URL will be: `https://YOUR_USERNAME.pythonanywhere.com`
-
----
-
-## Step 1: Push Code to GitHub
-
-Open a terminal in the project root folder on your computer:
-
-```bash
-git init
-git add .
-git commit -m "Initial commit"
+```
+Browser ──HTTPS──> Vercel (static Vue SPA)
+                        │
+                        │ XHR  https://YOURUSERNAME.pythonanywhere.com/api/...
+                        ▼
+                 PythonAnywhere (FastAPI ──> backend/mess.db)
 ```
 
-Go to https://github.com/new → create a repo named `sr-mess` (do NOT add README/.gitignore/license).
-
-```bash
-git remote add origin https://github.com/YOUR_USERNAME/sr-mess.git
-git push -u origin main
-```
+**Do Part A before Part C** — the API's CORS allowlist needs your Vercel domain.
 
 ---
 
-## Step 2: Clone the Repo on PythonAnywhere
+## Before you start
 
-1. Log in to https://www.pythonanywhere.com
-2. Go to **Dashboard** → Open a **Bash** console (click "Bash" under "Start a new console")
-3. In the console, run:
+- Repo pushed to GitHub: `https://github.com/sumithkannan/sr-mess-management`
+  (default branch `master`)
+- Free [Vercel](https://vercel.com/signup) account
+- Free [PythonAnywhere](https://www.pythonanywhere.com/registration/register/beginner/)
+  Beginner account — **no credit card required**
+- Node 18+ locally (optional, only for testing a production build)
 
-```bash
-git clone https://github.com/YOUR_USERNAME/sr-mess.git
-cd sr-mess
-```
+### Why two services
+
+- **`dist/` is never committed to git.** Vercel builds the frontend from source
+  on every push, so the repo stays clean.
+- **PythonAnywhere stays tiny.** It runs only the Python API — no
+  `node_modules`, no 512 MB disk pressure, no CPU spent on `npm install`.
+  PythonAnywhere's own docs warn that installing Vue can exceed free-tier limits.
+- **Free custom domain.** Vercel provides HTTPS + custom domains free;
+  PythonAnywhere does not offer custom domains at all.
 
 ---
 
-## Step 3: Create a Virtual Environment
+# Part A — Frontend on Vercel
+
+**A1.** Sign up at https://vercel.com/signup
+
+**A2.** Go to https://vercel.com/new → import `sumithkannan/sr-mess-management`
+
+**A3.** On the **Configure** screen, set:
+
+- **Framework Preset:** Vite
+- **Root Directory:** `frontend`  ← **most important step**
+
+> ⚠️ Get this wrong and the build fails with "no build script". The repo-root
+> `package.json` only has a `dev` script.
+
+**A4.** Expand **Environment Variables**, add:
+
+| Key | Value |
+|-----|-------|
+| `VITE_API_BASE_URL` | `https://YOURUSERNAME.pythonanywhere.com` |
+
+Use a placeholder for now if you have not made the PythonAnywhere account yet —
+Part D shows you how to update it.
+
+**A5.** Click **Deploy**
+
+**A6.** Note your URL, e.g. `https://sr-mess.vercel.app`
+
+The page will load but login will fail until Part C is done. That is expected.
+
+> `frontend/.env.production` contains an empty `VITE_API_BASE_URL`. Vercel's
+> environment variable takes priority over the file, so this is harmless and a
+> local `npm run build` still produces relative URLs for same-origin testing.
+
+> **No `vercel.json` is needed.** The router uses `createWebHashHistory()`, so
+> URLs look like `/#/dashboard` and the server never needs an SPA rewrite.
+
+---
+
+# Part B — PythonAnywhere account
+
+**B1.** Sign up:
+https://www.pythonanywhere.com/registration/register/beginner/ — **no card required**
+
+**B2.** Confirm your email, log in, open the **Dashboard**
+
+**B3.** Go to **Account** page → **API token** → generate a token and copy it
+
+> This token becomes your `SECRET_KEY`. There is no other way to set environment
+> variables on PythonAnywhere's ASGI hosting.
+
+---
+
+# Part C — Backend on PythonAnywhere
+
+**C1.** On the Dashboard, click **Bash** under "Start a new console"
+
+**C2.** Install the CLI tool:
 
 ```bash
-cd ~/sr-mess/backend
-python3.11 -m venv venv
-source venv/bin/activate
+pip install --upgrade pythonanywhere
+```
+
+> A `typing-extensions` error during install is known and safe to ignore.
+
+**C3.** Clone and set up Python:
+
+```bash
+git clone https://github.com/sumithkannan/sr-mess-management.git
+cd sr-mess-management
+
+mkvirtualenv messvenv --python=python3.10
 pip install --upgrade pip
-pip install -r requirements.txt
+pip install -r backend/requirements.txt
 ```
 
-This installs FastAPI, Uvicorn, SQLAlchemy, etc. Takes ~2 minutes.
-
----
-
-## Step 4: Build the Frontend
+**C4.** Create the secrets file:
 
 ```bash
-cd ~/sr-mess/frontend
-npm install
-npm run build
+nano backend/.env
 ```
 
-If `npm` is not found, run first: `nvm install 22 && nvm use 22` then retry.
+Paste in, replacing both placeholders:
 
-After this, the built frontend files will be in `~/sr-mess/frontend/dist/`.
-
----
-
-## Step 5: Set Up the Web App
-
-1. Go to **PythonAnywhere Dashboard** → **Web** tab
-2. Click **Add a new web app**
-3. Click **Next** (accept default domain)
-4. Choose **Manual configuration** (NOT "FastAPI" — manual gives control)
-5. Choose **Python 3.11** → click Next
-6. Wait for the web app to be created
-
-Now configure it:
-
-### 5a. Set the source code path
-- **Code** section → **Working directory**: `/home/YOUR_USERNAME/sr-mess/backend`
-
-### 5b. Set the virtualenv
-- **Virtualenv** section → Enter: `/home/YOUR_USERNAME/sr-mess/backend/venv`
-- Click **Set**
-
-### 5c. Configure the ASGI app
-- **Code** section → Find **ASGI application file**
-- Set it to: `/home/YOUR_USERNAME/sr-mess/backend/pythonanywhere_asgi.py`
-- Click the pencil icon to edit → Write this content:
-
-```python
-import sys
-import os
-
-path = '/home/YOUR_USERNAME/sr-mess/backend'
-if path not in sys.path:
-    sys.path.append(path)
-
-os.environ.setdefault('CORS_ORIGINS', '')
-
-# DATABASE_URL stays at default sqlite:///./mess.db
-# The mess.db file will be created in the backend/ directory
-
-from app.main import app
-application = app
+```ini
+SECRET_KEY=PASTE_YOUR_API_TOKEN_HERE
+CORS_ORIGINS=https://sr-mess.vercel.app
 ```
 
-Replace `YOUR_USERNAME` with your actual PythonAnywhere username. Click **Save**.
+Save with `Ctrl+O` → `Enter` → `Ctrl+X`
 
-### 5d. Set environment variables
-- **Environment variables** section → click **Add environment variable**:
-  - **Variable name:** `SECRET_KEY`
-  - **Value:** Generate one: `python3 -c "import secrets; print(secrets.token_urlsafe(32))"` (run this in a Bash console and paste the output)
+> Use your real Vercel domain from A6, with `https://` and no trailing slash.
+> Do not set `DATABASE_URL` — it defaults to `backend/mess.db` on persistent disk.
 
-  - **Variable name:** `CORS_ORIGINS`
-  - **Value:** `https://YOUR_USERNAME.pythonanywhere.com`
-  
-  - **Variable name:** `PYTHONANYWHERE_DOMAIN`
-  - **Value:** `YOUR_USERNAME.pythonanywhere.com`
-
-### 5e. Set static files for the frontend
-- **Static Files** section → Add these entries:
-
-| URL | Directory |
-|-----|-----------|
-| `/assets` | `/home/YOUR_USERNAME/sr-mess/frontend/dist/assets` |
-| `/favicon.ico` | `/home/YOUR_USERNAME/sr-mess/frontend/dist/favicon.ico` |
-
-**Important:** Make sure the `/assets` entry is at the TOP of the list. Use the drag handle to reorder if needed.
-
-### 5f. Reload
-- Click the green **Reload** button at the top of the page
-
----
-
-## Step 6: Verify the Backend
-
-Visit: `https://YOUR_USERNAME.pythonanywhere.com/api/health`
-
-You should see: `{"status":"ok","app":"Mess Management System"}`
-
-If not, check the **Error log** link on the Web tab to debug.
-
----
-
-## Step 7: Verify the Frontend
-
-Visit: `https://YOUR_USERNAME.pythonanywhere.com`
-
-You should see the login page of the Mess Management app.
-
-If it doesn't load the API data, open **Browser DevTools** → **Console** tab to see error messages.
-
----
-
-## Step 8: Admin Account (Auto-Created)
-
-The app auto-creates an admin account on first startup. Default credentials are defined in `backend/app/services/auth_service.py` — check that file for the email and password. Typically:
-
-- **Email:** `admin@example.com`
-- **Password:** `admin123`
-
-If the database file already exists (from local dev), the admin is already there. You can log in directly.
-
----
-
-## Step 9: Custom Domain (Optional, Paid)
-
-PythonAnywhere free tier does NOT support custom domains. To use a custom domain like `mess.collegename.ac.in`:
-
-1. Upgrade to a **Hacker** plan ($5/month) or higher
-2. **Web** tab → **Add a custom domain**
-3. Follow PythonAnywhere's DNS instructions to add a CNAME record with your domain provider
-
----
-
-## Maintenance
-
-### Updating after code changes
+**C5.** Create the site (replace `YOURUSERNAME`):
 
 ```bash
-# In PythonAnywhere Bash console:
-cd ~/sr-mess
-git pull
-
-# Rebuild frontend if frontend code changed:
-cd frontend
-npm install
-npm run build
-cd ..
-
-# Reinstall backend deps if requirements.txt changed:
-cd backend
-source venv/bin/activate
-pip install -r requirements.txt
-cd ..
-
-# Then go to Web tab → click Reload
+pa website create \
+  --domain YOURUSERNAME.pythonanywhere.com \
+  --command '/home/YOURUSERNAME/.virtualenvs/messvenv/bin/uvicorn --app-dir /home/YOURUSERNAME/sr-mess-management/backend --uds ${DOMAIN_SOCKET} pythonanywhere_asgi:application'
 ```
 
-### Viewing logs
-- **Web** tab → **Error log** — most important, check this first for 500 errors
-- **Web** tab → **Server log** — shows all requests, useful for debugging 404s
-- Inside the app, you can also run: `cat /var/log/YOUR_USERNAME.pythonanywhere.com.error.log`
+You should see:
 
-### Resetting the database
-```bash
-cd ~/sr-mess/backend
-rm mess.db
-source venv/bin/activate
-python -c "from app.main import app; from app.database import Base, engine; Base.metadata.create_all(bind=engine); from app.services.auth_service import seed_admin; seed_admin()"
+```
+< All done! Your site is now live at YOURUSERNAME.pythonanywhere.com. >
 ```
 
-Then **Reload** the web app.
+> If you are on the **EU** system the domain is `YOURUSERNAME.eu.pythonanywhere.com`.
+> A 404 for the first few seconds after creation is a known bug — refresh.
 
-### Database backup
-The database file is at: `~/sr-mess/backend/mess.db`
-Copy it to back up:
+---
+
+# Part D — Finish the Vercel env var
+
+**D1.** Vercel → your project → **Settings** → **Environment Variables**
+
+**D2.** Update `VITE_API_BASE_URL` to the real value:
+
+```
+https://YOURUSERNAME.pythonanywhere.com
+```
+
+**D3.** Redeploy — Vercel only reads environment variables at build time
+
+---
+
+# Part E — Verify
+
+**E1.** API works:
+
+```
+https://YOURUSERNAME.pythonanywhere.com/api/health
+```
+
+Expect `{"status":"ok","app":"Mess Management System"}`
+
+**E2.** Open your Vercel URL and log in:
+
+- Username: `admin`
+- Password: `PasswordToBeChanged`
+
+**E3.** Change the password immediately (Users page)
+
+---
+
+# Deploying updates
+
+## Frontend
+
+Just push — Vercel rebuilds automatically:
+
 ```bash
-cp ~/sr-mess/backend/mess.db ~/mess_backup_$(date +%Y%m%d).db
+git push origin master
+```
+
+## Backend
+
+On PythonAnywhere:
+
+```bash
+source ~/.virtualenvs/messvenv/bin/activate
+cd ~/sr-mess-management
+git pull origin master
+pip install -r backend/requirements.txt        # only if requirements.txt changed
+pa website reload --domain YOURUSERNAME.pythonanywhere.com
+```
+
+> ⚠️ There is **no Reload button on the Web tab** — your site is invisible there
+> because PythonAnywhere's FastAPI/ASGI support is beta. Always use
+> `pa website reload`.
+
+If you changed `backend/.env`, run `pa website reload` again.
+
+If you added a new `VITE_*` variable, add it under Vercel → **Settings →
+Environment Variables** and redeploy.
+
+---
+
+# Two things to know
+
+**1. Your site never appears on PythonAnywhere's Web tab.** No Reload button, no
+environment-variable UI, no error-log link. Logs live only in `/var/log`:
+
+```bash
+tail -f /var/log/YOURUSERNAME.pythonanywhere.com.error.log
+```
+
+**2. CORS errors are the #1 failure mode.** If login shows "Network Error", open
+the browser console — the message names the blocked origin. Fix `CORS_ORIGINS` in
+`backend/.env`, then `pa website reload`.
+
+---
+
+# Reference
+
+## PythonAnywhere ASGI hosting (beta) — what to expect
+
+| Topic | Reality |
+|-------|---------|
+| Site creation | **Only** via the `pa website` CLI — there is no "ASGI application file" field on the Web tab |
+| Web tab | Your site does **not** appear there. No Reload button, no env-var UI |
+| Reloading | `pa website reload --domain ...` |
+| Static files | Not supported — irrelevant here, Vercel serves the frontend |
+| Long-term pricing | Not finalized. PythonAnywhere state they are "99.9% certain" a free plan will exist |
+
+Free tier limits: 1 web app, 512 MB disk, 2 consoles, no custom domain.
+
+## Logs
+
+The API site's logs are in `/var/log`, reachable from the **Files** page, a
+console, or `tail`:
+
+```bash
+tail -f /var/log/YOURUSERNAME.pythonanywhere.com.error.log    # startup + tracebacks
+tail -f /var/log/YOURUSERNAME.pythonanywhere.com.server.log    # requests, 404s
+tail -f /var/log/YOURUSERNAME.pythonanywhere.com.access.log    # hit counts
+```
+
+A healthy startup looks like:
+
+```
+INFO:     Started server process [1]
+INFO:     Application startup complete.
+INFO:     Uvicorn running on unix socket /var/sockets/YOURUSERNAME.pythonanywhere.com/app.sock
+```
+
+Frontend logs are in the Vercel dashboard → your project → **Deployments** →
+**Logs**.
+
+## Database backups
+
+SQLite persists at `~/sr-mess-management/backend/mess.db` and survives reloads.
+
+```bash
+cp ~/sr-mess-management/backend/mess.db ~/mess-backup-$(date +%Y%m%d).db
+```
+
+To automate, use the **Tasks** tab (free accounts get one scheduled task):
+
+```bash
+cp /home/YOURUSERNAME/sr-mess-management/backend/mess.db /home/YOURUSERNAME/backups/mess-$(date +\%Y\%m\%d).db
+```
+
+## Custom domain
+
+Point your domain at **Vercel**, not PythonAnywhere:
+
+1. Vercel → your project → **Settings → Domains** → add `mess.yourdomain.com`
+2. Vercel shows the DNS records; add them at your domain registrar
+3. Vercel issues HTTPS automatically and renews it on its own
+
+Then add the custom domain to `CORS_ORIGINS` in `backend/.env` and reload:
+
+```ini
+CORS_ORIGINS=https://mess.yourdomain.com,https://sr-mess.vercel.app
 ```
 
 ---
 
-## Troubleshooting
+# Troubleshooting
+
+### "Network Error" in the browser console
+
+Almost always CORS. Check in order:
+
+1. `backend/.env` has `CORS_ORIGINS=https://<your-vercel-domain>` — exact match,
+   with `https://` and no trailing slash
+2. You ran `pa website reload` after editing `.env`
+3. You set `VITE_API_BASE_URL` in Vercel and **redeployed** (Vercel reads env
+   vars at build time only)
+
+The error reads like
+`blocked by CORS policy: No 'Access-Control-Allow-Origin' header`.
+
+### Vercel build fails with "No build script" / missing output
+
+**Root Directory** is not set to `frontend`. Vercel → **Settings → General** →
+Root Directory → `frontend` → redeploy.
+
+### Requests still go to `localhost:8000`
+
+`VITE_API_BASE_URL` is empty or missing at build time. Confirm it exists in
+Vercel's Environment Variables, then redeploy.
 
 ### 502 Bad Gateway
-- Go to **Web** tab → **Reload**
-- Check **Error log**
 
-### Module not found errors
-- Make sure **Virtualenv** path is correct and all deps are installed:
-  ```bash
-  cd ~/sr-mess/backend
-  source venv/bin/activate
-  pip list
-  pip install -r requirements.txt
-  ```
+```bash
+pa website reload --domain YOURUSERNAME.pythonanywhere.com
+```
+
+Then read the error log.
+
+### Site shows PythonAnywhere's "Coming Soon!" page
+
+The ASGI site was never created or was deleted:
+
+```bash
+pa website get          # list sites
+```
+
+Re-run step C5.
 
 ### "No module named 'app'"
-- Your **Working directory** must be `/home/YOUR_USERNAME/sr-mess/backend`
-- The ASGI file must start with the sys.path.append line shown above
 
-### Frontend shows blank page
-- Check **Server log** for 404 errors on `.js`/`.css` files
-- Make sure **Static Files** entries are correct in the Web tab
-- Rebuild the frontend: `cd ~/sr-mess/frontend && npm install && npm run build`
-- Check **Browser DevTools** → **Console** tab (F12)
+The `--app-dir` path is wrong. Inspect the site, then recreate it:
 
-### Login says "Network Error"
-- Open **Browser DevTools** → **Network** tab → Log in again
-- Check what URL the API call goes to
-- It should be `https://YOUR_USERNAME.pythonanywhere.com/api/auth/login`
-- If it's still `http://localhost:8000`, rebuild the frontend (the `.env.production` might not have been picked up)
+```bash
+pa website get --domain YOURUSERNAME.pythonanywhere.com
+pa website delete --domain YOURUSERNAME.pythonanywhere.com
+# fix the path, then re-run step C5
+```
+
+### Vercel preview deployments get CORS errors
+
+Preview URLs look like `https://<hash>-sr-mess.vercel.app` — a different origin.
+Either add each one to `CORS_ORIGINS` in `backend/.env`, or disable preview
+deployments (Vercel → **Settings → Git** → uncheck automatic deployments for
+previews). Production URL only is fine for normal use.
+
+### Running out of disk (512 MB free limit)
+
+```bash
+du -sh ~/sr-mess-management/* ~/.cache/pip 2>/dev/null
+rm -rf ~/.cache/pip
+```
 
 ---
 
-## File Changes Made for Deployment (Summary)
+# File changes made for deployment
 
-| File | What Changed |
-|------|-------------|
-| `backend/requirements.txt` | Removed psycopg2-binary (SQLite only for PA) |
-| `backend/app/main.py` | Added catch-all route to serve frontend for SPA routing |
-| `backend/pythonanywhere_asgi.py` | **NEW** — ASGI entry point for PythonAnywhere |
-| `frontend/vite.config.js` | Added dev proxy for `/api` → `localhost:8000` |
-| `frontend/src/api/index.js` | Uses relative URLs by default (same origin in prod) |
-| `frontend/.env.production` | Empty VITE_API_BASE_URL (uses same origin) |
+| File | Change | Why |
+|------|--------|-----|
+| `backend/app/config.py` | Added `BASE_DIR`; `DATABASE_URL` and `.env` resolved by absolute path | Under `pa` the working directory is not guaranteed, so a relative `sqlite:///./mess.db` or `env_file=".env"` could silently miss. A missed `.env` means `SECRET_KEY` falls back to an insecure hardcoded default |
+| `backend/pythonanywhere_asgi.py` | ASGI entry point exposing `application` | Target of the `pa website create --command` |
+| `backend/requirements.txt` | Removed `psycopg2-binary` | SQLite only |
+| `frontend/src/api/index.js` | `baseURL` from `VITE_API_BASE_URL` | Empty in dev (Vite proxy), absolute in production |
+| `frontend/vite.config.js` | Dev-only `/api` → `localhost:8000` proxy | Local development |
+| `frontend/.env.production` | `VITE_API_BASE_URL=` (empty) | Vercel's env var takes priority; local prod build stays same-origin |
+
+`frontend/dist/` is **not** committed — Vercel builds it.
