@@ -183,6 +183,28 @@ Expect `{"status":"ok","app":"Mess Management System"}`
 
 **E3.** Change the password immediately (Users page)
 
+**E4.** Confirm both deploys are live:
+
+```
+https://YOURUSERNAME.pythonanywhere.com/api/version
+```
+
+```json
+{
+  "commit": "a1b2c3d",
+  "branch": "master",
+  "deployed_at": "2026-10-05T19:00:00Z",
+  "source_modified_at": "2026-10-05T19:00:00Z",
+  "uptime_seconds": 4.2
+}
+```
+
+The same stamp appears in the UI on the **Login** and **Profile** pages as
+`api <commit> · master · <timestamp>`. Seeing it there proves the Vercel
+frontend deploy and the PythonAnywhere backend deploy are both live.
+
+See [Confirming a deploy actually landed](#confirming-a-deploy-actually-landed).
+
 ---
 
 # Deploying updates
@@ -271,6 +293,46 @@ Check **Actions** in the repo for the run. It should end with
 
 You can also trigger it manually from the Actions tab → **Run workflow**.
 
+Tick **full_deploy** to push all 47 production files instead of only what
+changed. Use it if a run failed partway and PythonAnywhere is in an
+inconsistent state.
+
+---
+
+## Confirming a deploy actually landed
+
+Check the commit the API reports against your local HEAD:
+
+```bash
+git log -1 --format=%h                                    # locally
+curl -s https://YOURUSERNAME.pythonanywhere.com/api/version
+```
+
+If the SHAs differ, the deploy did not land. The most reliable field is
+`commit`:
+
+| Field | What it tells you |
+|-------|-------------------|
+| `commit` | exact deployed commit — must equal `git log -1 --format=%h` |
+| `branch` | branch the workflow ran from |
+| `deployed_at` | timestamp the workflow wrote at upload time |
+| `source_modified_at` | mtime of `app/main.py` on PythonAnywhere |
+| `uptime_seconds` | resets to ~0 on reload, proving the process restarted |
+
+If `commit` is `null`, the stamp file never arrived — re-run with `full_deploy`.
+
+### How the stamp is produced
+
+Before uploading, the workflow writes `backend/deploy_stamp.json` containing
+the commit SHA, branch, and timestamp, and forces that one file into the
+upload list. The file is gitignored so it never enters the repo.
+
+Without a stamp the endpoint falls back to `git rev-parse HEAD`. On
+PythonAnywhere that fallback is **stale** — the Files API uploads source files
+but does not update git metadata — so treat a git-derived `commit` as a hint,
+not proof.
+
+---
 ## ⚠️ What the workflow does NOT do
 
 **It cannot install new Python dependencies.** PythonAnywhere has no API for

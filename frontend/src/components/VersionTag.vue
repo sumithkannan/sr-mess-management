@@ -19,7 +19,7 @@ const failed = ref(false)
 
 onMounted(async () => {
   try {
-    const { data } = await api.get('/version')
+    const { data } = await api.get('/api/version')
     info.value = data
   } catch {
     failed.value = true
