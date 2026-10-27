@@ -97,9 +97,11 @@
 </template>
 
 <script setup>
+const toast = useToast()
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import api from '../api'
+import { useToast } from '../composables/useToast'
 import { useAuthStore } from '../stores/auth'
 const auth = useAuthStore()
 
@@ -223,7 +225,7 @@ async function saveDateItems() {
   try {
     await Promise.all(promises)
     dateSaved.value = true
-  } catch (e) { alert('Error: ' + (e.response?.data?.detail || e.message)) }
+  } catch (e) { toast.error('Error: ' + (e.response?.data?.detail || e.message)) }
 }
 
 async function saveRecurringItems() {
@@ -253,7 +255,7 @@ async function saveRecurringItems() {
   try {
     await Promise.all(promises)
     recurringSaved.value = true
-  } catch (e) { alert('Error: ' + (e.response?.data?.detail || e.message)) }
+  } catch (e) { toast.error('Error: ' + (e.response?.data?.detail || e.message)) }
 }
 
 async function clearDateOverrides() {
@@ -262,7 +264,7 @@ async function clearDateOverrides() {
       await api.delete(`/api/menu-items/${item.id}`)
     }
     await loadMenu()
-  } catch (e) { alert('Error: ' + (e.response?.data?.detail || e.message)) }
+  } catch (e) { toast.error('Error: ' + (e.response?.data?.detail || e.message)) }
 }
 
 function warnUnsaved(e) {

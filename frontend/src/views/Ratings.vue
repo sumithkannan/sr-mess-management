@@ -37,8 +37,10 @@
 </template>
 
 <script setup>
+const toast = useToast()
 import { ref, reactive, onMounted, watch } from 'vue'
 import api from '../api'
+import { useToast } from '../composables/useToast'
 
 const selectedDate = ref(new Date().toISOString().split('T')[0])
 const mealTypes = ref([])
@@ -110,7 +112,7 @@ async function rate(mt, itemId, rating) {
     await api.post('/api/ratings', { menu_item_id: itemId, meal_type_id: mt.id, date: selectedDate.value, rating })
     myRatings.value[itemId] = rating
     hoverRating[itemId] = 0
-  } catch (e) { alert(e.response?.data?.detail || 'Error') }
+  } catch (e) { toast.error(e.response?.data?.detail || 'Error') }
 }
 
 watch(selectedDate, load)

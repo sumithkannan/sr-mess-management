@@ -285,7 +285,7 @@ async function assignDuty() {
       duties.value.push(data)
     }
     cancelDutyEdit()
-  } catch (e) { alert(e.response?.data?.detail || 'Error') }
+  } catch (e) { toast.error(e.response?.data?.detail || 'Error') }
 }
 
 function editDuty(d) {
@@ -300,7 +300,7 @@ async function removeDuty(id) {
   try {
     await api.delete(`/api/mess-duty/${id}`)
     duties.value = duties.value.filter(d => d.id !== id)
-  } catch (e) { alert(e.response?.data?.detail || 'Error') }
+  } catch (e) { toast.error(e.response?.data?.detail || 'Error') }
 }
 
 async function lookupDuty() {
@@ -311,7 +311,7 @@ async function lookupDuty() {
     lookupResult.value = data
   } catch (e) {
     lookupResult.value = []
-    alert(e.response?.data?.detail || 'Error')
+    toast.error(e.response?.data?.detail || 'Error')
   }
 }
 

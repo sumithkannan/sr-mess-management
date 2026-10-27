@@ -126,8 +126,10 @@
 </template>
 
 <script setup>
+const toast = useToast()
 import { ref, onMounted } from 'vue'
 import api from '../api'
+import { useToast } from '../composables/useToast'
 
 const mealTypes = ref([])
 const showForm = ref(false)
@@ -175,7 +177,7 @@ async function addMealType() {
     mealTypes.value.push(data)
     form.value = { name: '', start_time: '', end_time: '', vote_cutoff_hours: 12, vote_open_interval_days: 7, rating_start_hours: 2, attendance_buffer_hours: 1, sort_order: 0 }
     showForm.value = false
-  } catch (e) { alert('Error: ' + (e.response?.data?.detail || e.message)) }
+  } catch (e) { toast.error('Error: ' + (e.response?.data?.detail || e.message)) }
 }
 
 async function updateMealType(mt) {
@@ -188,8 +190,8 @@ async function updateMealType(mt) {
       rating_start_hours: mt.rating_start_hours,
       attendance_buffer_hours: mt.attendance_buffer_hours
     })
-    alert('Updated')
-  } catch (e) { alert('Error: ' + (e.response?.data?.detail || e.message)) }
+    toast.success('Updated')
+  } catch (e) { toast.error('Error: ' + (e.response?.data?.detail || e.message)) }
 }
 
 async function deleteMealType(id) {
@@ -197,7 +199,7 @@ async function deleteMealType(id) {
   try {
     await api.delete(`/api/meal-types/${id}`)
     mealTypes.value = mealTypes.value.filter(m => m.id !== id)
-  } catch (e) { alert('Error: ' + (e.response?.data?.detail || e.message)) }
+  } catch (e) { toast.error('Error: ' + (e.response?.data?.detail || e.message)) }
 }
 
 async function addOffDay() {
@@ -211,7 +213,7 @@ async function addOffDay() {
     offDays.value.push(data)
     offForm.value = { start_date: '', end_date: '', reason: '' }
     showOffForm.value = false
-  } catch (e) { alert('Error: ' + (e.response?.data?.detail || e.message)) }
+  } catch (e) { toast.error('Error: ' + (e.response?.data?.detail || e.message)) }
 }
 
 async function deleteOffDay(id) {
@@ -219,7 +221,7 @@ async function deleteOffDay(id) {
   try {
     await api.delete(`/api/off-days/${id}`)
     offDays.value = offDays.value.filter(o => o.id !== id)
-  } catch (e) { alert('Error: ' + (e.response?.data?.detail || e.message)) }
+  } catch (e) { toast.error('Error: ' + (e.response?.data?.detail || e.message)) }
 }
 
 onMounted(load)

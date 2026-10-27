@@ -42,8 +42,10 @@
 </template>
 
 <script setup>
+const toast = useToast()
 import { ref } from 'vue'
 import api from '../api'
+import { useToast } from '../composables/useToast'
 
 const dateFrom = ref(new Date(Date.now() - 7*86400000).toISOString().split('T')[0])
 const dateTo = ref(new Date().toISOString().split('T')[0])
@@ -79,7 +81,7 @@ async function loadReport(key) {
       reportHeaders.value = ['Meal', 'Date', 'Count', 'Avg']
       reportData.value = data.map(d => [d.meal_type, d.date, d.count, d.avg_rating])
     }
-  } catch (e) { alert('Error loading report') }
+  } catch (e) { toast.error('Error loading report') }
   finally { loading.value = false }
 }
 
@@ -99,6 +101,6 @@ async function downloadPdf() {
     link.download = `${currentReportType.value}.pdf`
     link.click()
     URL.revokeObjectURL(link.href)
-  } catch (e) { alert('Error downloading PDF') }
+  } catch (e) { toast.error('Error downloading PDF') }
 }
 </script>

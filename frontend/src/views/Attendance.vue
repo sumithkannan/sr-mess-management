@@ -95,8 +95,10 @@
 </template>
 
 <script setup>
+const toast = useToast()
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import api from '../api'
+import { useToast } from '../composables/useToast'
 import { useAuthStore } from '../stores/auth'
 
 const auth = useAuthStore()
@@ -216,7 +218,7 @@ async function toggleAttendance(userId) {
       attendanceList.value.push(data)
     }
   } catch (e) {
-    alert(e.response?.data?.detail || 'Error')
+    toast.error(e.response?.data?.detail || 'Error')
   } finally {
     savingUserId.value = null
   }
@@ -233,7 +235,7 @@ async function markAllVisible() {
     const { data } = await api.get(`/api/attendance/date/${attDate.value}/${selectedMealType.value}`)
     attendanceList.value = data
   } catch (e) {
-    alert(e.response?.data?.detail || 'Error')
+    toast.error(e.response?.data?.detail || 'Error')
   }
 }
 

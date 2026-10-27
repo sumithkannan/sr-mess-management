@@ -354,7 +354,7 @@ async function setVote(mt, shouldVote) {
         votes.value = votes.value.filter(x => x.id !== v.id)
       }
     }
-  } catch (e) { alert(e.response?.data?.detail || 'Error') }
+  } catch (e) { toast.error(e.response?.data?.detail || 'Error') }
 }
 
 async function submitRating(mt, rating) {
@@ -366,7 +366,7 @@ async function submitRating(mt, rating) {
     })
     myRatings.value[itemId] = rating
     hoverRating[itemId] = 0
-  } catch (e) { alert(e.response?.data?.detail || 'Error') }
+  } catch (e) { toast.error(e.response?.data?.detail || 'Error') }
 }
 
 onMounted(loadData)

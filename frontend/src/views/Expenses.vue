@@ -66,8 +66,10 @@
 </template>
 
 <script setup>
+const toast = useToast()
 import { ref } from 'vue'
 import api from '../api'
+import { useToast } from '../composables/useToast'
 
 const dt = new Date()
 const month = ref(dt.getMonth() + 1)
@@ -102,7 +104,7 @@ async function compressImage(file) {
       return
     }
     
-    alert('Image is compressing...')
+    toast.info('Image is compressing...')
     
     return new Promise((resolve) => {
       const img = new Image()
@@ -141,7 +143,7 @@ async function compressImage(file) {
       img.src = URL.createObjectURL(file)
     })
   } catch (e) {
-    alert('Failed to compress image')
+    toast.error('Failed to compress image')
     compressing.value = false
   }
 }
@@ -191,6 +193,6 @@ async function addExpense() {
     form.value = { description: '', amount: '', category: '', expense_date: new Date().toISOString().split('T')[0] }
     clearImage()
     showImageOptions.value = false
-  } catch (e) { alert(e.response?.data?.detail || 'Error') }
+  } catch (e) { toast.error(e.response?.data?.detail || 'Error') }
 }
 </script>
