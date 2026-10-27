@@ -54,37 +54,55 @@
       <button @click="loadExpenses" class="bg-blue-600 text-white px-3 py-2 rounded text-sm">Load</button>
     </div>
 
-    <div v-if="summary" class="bg-white border rounded-lg p-4 text-sm space-y-1">
-      <p class="font-medium">Summary</p>
-      <p>Total: Rs. {{ summary.total_expenses }}</p>
-      <p>Entries: {{ summary.total_entries }}</p>
+    <div v-if="summary" class="bg-white border rounded-lg px-4 py-3 text-sm flex justify-between items-center">
+      <div>
+        <p class="text-xs text-gray-500">Monthly expenses</p>
+        <p class="font-semibold text-blue-700">Rs. {{ summary.total_expenses }}</p>
+      </div>
+      <p class="text-xs text-gray-500">{{ summary.total_entries }} entries</p>
     </div>
 
-    <div v-for="e in expenses" :key="e.id" class="bg-white border rounded-lg p-3 text-sm space-y-2">
-      <div class="flex justify-between items-start gap-3">
-        <div class="min-w-0">
-          <p class="font-medium break-words">{{ e.description }}</p>
-          <p class="text-xs text-gray-500">{{ e.category }} - {{ e.expense_date }}</p>
-        </div>
-        <span class="font-semibold text-blue-700 shrink-0">Rs. {{ e.amount }}</span>
+    <div v-if="expenses.length" class="bg-white border rounded-lg overflow-hidden">
+      <div class="grid grid-cols-[1fr_auto] gap-3 px-4 py-2 bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
+        <span>Expense</span>
+        <span>Amount</span>
       </div>
-
-      <div class="flex items-center justify-between gap-2 pt-1 border-t border-gray-50">
-        <button v-if="e.bill_image" @click="viewBill(e)" class="shrink-0">
-          <img v-if="billUrls[e.id]" :src="billUrls[e.id]" alt="Bill" class="h-12 w-16 object-cover rounded border" />
-          <span v-else class="block h-12 w-16 rounded border bg-gray-50 text-[10px] text-gray-400 flex items-center justify-center">Loading</span>
-        </button>
-        <span v-else class="text-xs text-gray-400">No bill image</span>
-
-        <div class="flex gap-3">
-          <button @click="startEdit(e)" class="text-xs text-blue-600 hover:text-blue-800 font-medium">Edit</button>
-          <button @click="deleteExpense(e)" class="text-xs text-red-600 hover:text-red-800 font-medium">Delete</button>
-        </div>
-      </div>
+      <button
+        v-for="e in expenses"
+        :key="e.id"
+        @click="selectExpense(e)"
+        class="w-full grid grid-cols-[1fr_auto] gap-3 items-center px-4 py-3 text-left border-t hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"
+      >
+        <span class="min-w-0">
+          <span class="block font-medium text-sm break-words">{{ e.description }}</span>
+          <span class="block text-xs text-gray-500 mt-0.5">{{ e.expense_date }} <span class="mx-1">·</span> {{ e.category }}</span>
+        </span>
+        <span class="font-semibold text-sm text-gray-800 whitespace-nowrap">Rs. {{ e.amount }}</span>
+      </button>
     </div>
     <div v-if="expenses.length === 0" class="text-center py-8 text-gray-400">No expenses for this month</div>
 
     <Teleport to="body">
+      <div v-if="selectedExpense" class="fixed inset-0 z-[9997] bg-black/50 flex items-center justify-center p-4" @click.self="selectedExpense = null">
+        <section class="bg-white rounded-xl shadow-xl w-full max-w-sm p-5 space-y-4" role="dialog" aria-modal="true" aria-labelledby="expense-detail-title">
+          <div class="flex justify-between items-start gap-3">
+            <div class="min-w-0">
+              <p class="text-xs text-gray-500">{{ selectedExpense.expense_date }} <span class="mx-1">·</span> {{ selectedExpense.category }}</p>
+              <h3 id="expense-detail-title" class="font-semibold text-lg break-words mt-1">{{ selectedExpense.description }}</h3>
+            </div>
+            <button @click="selectedExpense = null" aria-label="Close expense details" class="text-gray-500 hover:text-gray-800">✕</button>
+          </div>
+          <p class="text-2xl font-semibold text-blue-700">Rs. {{ selectedExpense.amount }}</p>
+          <button v-if="selectedExpense.bill_image" @click="viewBill(selectedExpense)" class="text-sm text-blue-600 hover:text-blue-800">
+            {{ billUrls[selectedExpense.id] ? 'View bill image' : 'Open bill image' }}
+          </button>
+          <p v-else class="text-sm text-gray-500">No bill image attached</p>
+          <div class="flex gap-2 pt-2 border-t">
+            <button @click="startEdit(selectedExpense)" class="flex-1 bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700">Edit</button>
+            <button @click="deleteExpense(selectedExpense)" class="flex-1 bg-red-50 text-red-700 px-4 py-2 rounded text-sm hover:bg-red-100">Delete</button>
+          </div>
+        </section>
+      </div>
       <div v-if="viewerUrl" class="fixed inset-0 z-[9998] bg-black/80 flex items-center justify-center p-4" @click="viewerUrl = ''">
         <div class="relative max-h-full max-w-full">
           <img :src="viewerUrl" class="max-h-[85vh] max-w-full rounded" />
@@ -111,6 +129,7 @@ const expenses = ref([])
 const summary = ref(null)
 const showForm = ref(false)
 const editingId = ref(null)
+const selectedExpense = ref(null)
 const form = ref({ description: '', amount: '', category: '', expense_date: new Date().toISOString().split('T')[0] })
 
 const cameraInput = ref(null)
@@ -355,13 +374,8 @@ async function ensureBillUrl(e) {
     billUrls.value[e.id] = url
     return url
   } catch (err) {
+    toast.error(err.response?.data?.detail || 'Error loading bill image')
     return ''
-  }
-}
-
-async function loadBillUrls() {
-  for (const e of expenses.value) {
-    if (e.bill_image) await ensureBillUrl(e)
   }
 }
 
@@ -374,13 +388,13 @@ async function loadExpenses() {
     revokeBillUrls()
     expenses.value = e.data
     summary.value = s.data
-    await loadBillUrls()
   } catch (err) {
     toast.error(err.response?.data?.detail || 'Error loading expenses')
   }
 }
 
 async function startEdit(e) {
+  selectedExpense.value = null
   editingId.value = e.id
   form.value = {
     description: e.description,
@@ -394,8 +408,13 @@ async function startEdit(e) {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
-function viewBill(e) {
-  const url = billUrls.value[e.id]
+async function selectExpense(e) {
+  selectedExpense.value = e
+  if (e.bill_image) await ensureBillUrl(e)
+}
+
+async function viewBill(e) {
+  const url = await ensureBillUrl(e)
   if (url) viewerUrl.value = url
 }
 
@@ -403,6 +422,7 @@ async function deleteExpense(e) {
   if (!confirm(`Delete expense "${e.description}"?`)) return
   try {
     await api.delete(`/api/expenses/${e.id}`)
+    selectedExpense.value = null
     toast.success('Expense deleted')
     await loadExpenses()
   } catch (err) {
