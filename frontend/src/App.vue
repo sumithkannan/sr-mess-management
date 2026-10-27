@@ -6,6 +6,7 @@
     </main>
     <BottomNav v-if="auth.isAuthenticated" />
     <Toast />
+    <GlobalLoader />
   </div>
 </template>
 
@@ -14,5 +15,6 @@ import { useAuthStore } from './stores/auth'
 import TopHeader from './components/TopHeader.vue'
 import BottomNav from './components/BottomNav.vue'
 import Toast from './components/Toast.vue'
+import GlobalLoader from './components/GlobalLoader.vue'
 const auth = useAuthStore()
 </script>
