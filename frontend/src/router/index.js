@@ -1,7 +1,7 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 
 const routes = [
-  { path: '/login', name: 'Login', component: () => import('../views/Login.vue') },
+  { path: '/login', name: 'Login', component: () => import('../views/Login.vue'), meta: { guestOnly: true } },
   { path: '/', redirect: '/dashboard' },
   { path: '/dashboard', name: 'Dashboard', component: () => import('../views/Dashboard.vue'), meta: { requiresAuth: true } },
   { path: '/menu', name: 'Menu', component: () => import('../views/Menu.vue'), meta: { requiresAuth: true } },
@@ -19,6 +19,7 @@ const router = createRouter({ history: createWebHashHistory(), routes })
 router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('token')
   const user = JSON.parse(localStorage.getItem('user') || '{}')
+  if (to.meta.guestOnly && token) return next('/dashboard')
   if (to.meta.requiresAuth && !token) return next('/login')
   if (to.meta.requiresAdmin && user.role !== 'admin') return next('/dashboard')
   next()

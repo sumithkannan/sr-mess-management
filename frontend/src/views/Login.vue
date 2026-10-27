@@ -13,7 +13,6 @@
           {{ loading ? 'Logging in...' : 'Login' }}
         </button>
       </form>
-      <p class="text-xs text-center text-gray-400 mt-4">Default: admin / PasswordToBeChanged</p>
       <VersionTag />
     </div>
   </div>
