@@ -194,7 +194,7 @@ async function loadUsers() {
     ])
     attendanceList.value = aRes.data
     const votedIds = new Set(vRes.data.filter(v => v.meal_type_id === +selectedMealType.value).map(v => v.user_id))
-    users.value = uRes.data.map(u => ({ ...u, voted: votedIds.has(u.id) }))
+    users.value = uRes.data.filter(u => votedIds.has(u.id)).map(u => ({ ...u, voted: true }))
     hasDuty.value = dutyRes.data.some(d => d.id === auth.user?.id)
   } catch (e) {
     console.error('Attendance load error:', e)
