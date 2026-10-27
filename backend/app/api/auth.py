@@ -5,17 +5,19 @@ from jose import jwt
 from passlib.context import CryptContext
 from ..dependencies import get_db, get_current_user
 from ..models.user import User
-from ..schemas.user import LoginRequest, TokenResponse, UserResponse
+from ..schemas.user import LoginRequest, TokenResponse, UserResponse, ChangePasswordRequest
 from ..config import settings
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
 
 def create_access_token(data: dict):
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
 
 @router.post("/login", response_model=TokenResponse)
 def login(req: LoginRequest, db: Session = Depends(get_db)):
@@ -27,6 +29,20 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
     token = create_access_token({"sub": str(user.id), "role": user.role})
     return TokenResponse(access_token=token, user=UserResponse.model_validate(user))
 
+
 @router.get("/me", response_model=UserResponse)
 def get_me(current_user: User = Depends(get_current_user)):
     return UserResponse.model_validate(current_user)
+
+
+@router.post("/change-password")
+def change_password(req: ChangePasswordRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if not pwd_context.verify(req.current_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    if len(req.new_password) < 6:
+        raise HTTPException(status_code=400, detail="New password must be at least 6 characters")
+    if req.new_password == req.current_password:
+        raise HTTPException(status_code=400, detail="New password must be different from current password")
+    current_user.password_hash = pwd_context.hash(req.new_password)
+    db.commit()
+    return {"message": "Password changed successfully"}
