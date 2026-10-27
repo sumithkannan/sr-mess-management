@@ -51,7 +51,8 @@
       </div>
 
       <div class="px-4 py-3 border-b border-gray-50">
-        <p class="text-base font-medium text-gray-800 text-center">{{ itemsText(mt.id) }}</p>
+        <p v-if="itemsText(mt.id)" class="text-base font-medium text-gray-800 text-center">{{ itemsText(mt.id) }}</p>
+        <p v-else class="text-sm text-gray-400 text-center italic">No menu available</p>
       </div>
 
       <div v-if="itemsText(mt.id)" class="px-4 py-3 border-b border-gray-50">
