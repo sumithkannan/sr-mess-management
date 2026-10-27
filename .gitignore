@@ -13,6 +13,9 @@ backend/*.egg-info/
 backend/mess.db
 backend/test.db
 
+# --- Uploaded bill images (runtime data) ---
+backend/uploads/
+
 # --- Build metadata written by the deploy workflow (never committed) ---
 backend/deploy_stamp.json
 
