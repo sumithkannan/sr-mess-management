@@ -143,7 +143,10 @@ async function compressImage(file) {
       img.src = URL.createObjectURL(file)
     })
   } catch (e) {
-    toast.error('Failed to compress image')
+    toast.error("Couldn't compress image. Please use a smaller JPG/PNG or pick from gallery.")
+    imageFile.value = null
+    imagePreview.value = ''
+    imageSizeText.value = ''
     compressing.value = false
   }
 }
