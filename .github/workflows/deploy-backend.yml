@@ -158,8 +158,18 @@ jobs:
               print(f"  {index}/{len(changed)} ok: {relative}", flush=True)
 
           if changed:
-              Website().reload(domain)
-              print("reload   : ok")
+              for attempt in range(1, 4):
+                  try:
+                      Website().reload(domain)
+                      print("reload   : ok")
+                      break
+                  except PythonAnywhereApiException as exc:
+                      msg = str(exc)
+                      if "409" in msg and attempt < 3:
+                          print(f"reload retry {attempt}/3 after timeout (waiting 20s)...", flush=True)
+                          time.sleep(20)
+                          continue
+                      raise
 
           with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
               fh.write(f"domain={domain}\n")
