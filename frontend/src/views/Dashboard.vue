@@ -184,12 +184,7 @@ function isDateVotingOpen(dateStr) {
 }
 
 function changeDate(delta) {
-  const newDate = shiftDate(selectedDate.value, delta)
-  if (delta > 0 && !isDateVotingOpen(newDate)) {
-    toast.info('Voting not open for this date')
-    return
-  }
-  selectedDate.value = newDate
+  selectedDate.value = shiftDate(selectedDate.value, delta)
   loadData()
 }
 
@@ -208,11 +203,6 @@ onMounted(async () => {
 function pickDate() {
   const picked = dateInput.value?.value
   if (picked && picked !== selectedDate.value) {
-    if (picked > selectedDate.value && !isDateVotingOpen(picked)) {
-      toast.info('Voting not open for this date')
-      dateInput.value.value = selectedDate.value
-      return
-    }
     selectedDate.value = picked
     loadData()
   }
