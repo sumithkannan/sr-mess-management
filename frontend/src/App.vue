@@ -5,6 +5,7 @@
       <router-view :key="$route.fullPath" />
     </main>
     <BottomNav v-if="auth.isAuthenticated" />
+    <Toast />
   </div>
 </template>
 
@@ -12,5 +13,6 @@
 import { useAuthStore } from './stores/auth'
 import TopHeader from './components/TopHeader.vue'
 import BottomNav from './components/BottomNav.vue'
+import Toast from './components/Toast.vue'
 const auth = useAuthStore()
 </script>

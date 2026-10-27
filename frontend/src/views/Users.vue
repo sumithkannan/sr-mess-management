@@ -89,10 +89,14 @@
         <input v-model="form.name" placeholder="Name" class="w-full border rounded px-3 py-2 text-sm" />
         <input v-model="form.email" placeholder="Email (optional)" type="email" class="w-full border rounded px-3 py-2 text-sm" />
         <p class="text-xs text-gray-400">Default password: PasswordToBeChanged</p>
-        <button @click="addUser" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 active:scale-95 transition-all duration-150"
-          :disabled="!form.username || !form.name">
-          Create User
-        </button>
+        <div class="flex gap-2">
+          <button @click="addUser" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 active:scale-95 transition-all duration-150"
+            :disabled="!form.username || !form.name">
+            Create User
+          </button>
+          <button @click="downloadTemplate" class="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg text-sm hover:bg-gray-200">Download Template</button>
+          <button @click="openBulkUpload" class="bg-blue-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-blue-700">Bulk Add</button>
+        </div>
       </div>
 
       <div class="px-4 py-3 border-b border-gray-100 space-y-2">
@@ -123,14 +127,17 @@
             </p>
           </div>
           <div class="flex gap-1.5 shrink-0 ml-3">
-            <button v-if="u.role !== 'admin'" @click="promote(u.id)"
-              class="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded hover:bg-purple-200">Admin</button>
+            <button v-if="u.username !== 'admin'" @click="toggleAdmin(u)"
+              class="text-xs px-2 py-1 rounded"
+              :class="u.role === 'admin' ? 'bg-gray-100 text-gray-700 hover:bg-gray-200' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'">
+              {{ u.role === 'admin' ? 'Remove Admin' : 'Make Admin' }}
+            </button>
             <button @click="u.is_active ? suspend(u.id) : activate(u.id)"
               class="text-xs px-2 py-1 rounded"
               :class="u.is_active ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-green-100 text-green-700 hover:bg-green-200'">
               {{ u.is_active ? 'Suspend' : 'Activate' }}
             </button>
-            <button @click="deleteUser(u.id)"
+            <button v-if="u.username !== 'admin'" @click="deleteUser(u.id)"
               class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded hover:bg-gray-200">Del</button>
           </div>
         </div>
@@ -147,12 +154,24 @@
         </div>
       </div>
     </div>
+
+    <input ref="bulkInput" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" @change="handleBulkUpload" class="hidden" />
+    
+    <div v-if="bulkProgress.show" class="bg-white border rounded-lg p-4 space-y-2">
+      <p class="text-sm font-medium">Adding users...</p>
+      <div class="w-full bg-gray-200 rounded-full h-2">
+        <div class="bg-blue-600 h-2 rounded-full transition-all" :style="{ width: bulkProgress.percent + '%' }"></div>
+      </div>
+      <p class="text-xs text-gray-500">{{ bulkProgress.percent }}%</p>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import api from '../api'
+import { useToast } from '../composables/useToast'
+const toast = useToast()
 
 const users = ref([])
 const duties = ref([])
@@ -169,6 +188,8 @@ const dutySelectedUserName = ref('')
 const dutyStart = ref('')
 const dutyEnd = ref('')
 const editingDutyId = ref(null)
+const bulkInput = ref(null)
+const bulkProgress = ref({ show: false, percent: 0 })
 
 const lookupDate = ref('')
 const lookupResult = ref([])
@@ -301,15 +322,17 @@ async function addUser() {
     users.value.push(data)
     form.value = { username: '', name: '', email: '' }
     showForm.value = false
-  } catch (e) { alert(e.response?.data?.detail || 'Error') }
+    toast.success('User added successfully')
+  } catch (e) { toast.error(e.response?.data?.detail || 'Error') }
 }
 
-async function promote(id) {
+async function toggleAdmin(u) {
   try {
-    await api.patch(`/api/users/${id}/role?role=admin`)
-    const u = users.value.find(x => x.id === id)
-    if (u) u.role = 'admin'
-  } catch (e) { alert(e.response?.data?.detail || 'Error') }
+    const newRole = u.role === 'admin' ? 'user' : 'admin'
+    await api.patch(`/api/users/${u.id}/role?role=${newRole}`)
+    u.role = newRole
+    toast.success(`Role updated to ${newRole}`)
+  } catch (e) { toast.error(e.response?.data?.detail || 'Error') }
 }
 
 async function suspend(id) {
@@ -317,7 +340,8 @@ async function suspend(id) {
     await api.patch(`/api/users/${id}/suspend`)
     const u = users.value.find(x => x.id === id)
     if (u) u.is_active = false
-  } catch (e) { alert(e.response?.data?.detail || 'Error') }
+    toast.success('User suspended')
+  } catch (e) { toast.error(e.response?.data?.detail || 'Error') }
 }
 
 async function activate(id) {
@@ -325,7 +349,8 @@ async function activate(id) {
     await api.patch(`/api/users/${id}/activate`)
     const u = users.value.find(x => x.id === id)
     if (u) u.is_active = true
-  } catch (e) { alert(e.response?.data?.detail || 'Error') }
+    toast.success('User activated')
+  } catch (e) { toast.error(e.response?.data?.detail || 'Error') }
 }
 
 async function deleteUser(id) {
@@ -333,7 +358,47 @@ async function deleteUser(id) {
   try {
     await api.delete(`/api/users/${id}`)
     users.value = users.value.filter(u => u.id !== id)
-  } catch (e) { alert(e.response?.data?.detail || 'Error') }
+  } catch (e) { toast.error(e.response?.data?.detail || 'Error') }
+}
+
+function openBulkUpload() {
+  bulkInput.value?.click()
+}
+
+async function downloadTemplate() {
+  try {
+    const res = await api.get('/api/users/bulk/template', { responseType: 'blob' })
+    const url = URL.createObjectURL(new Blob([res.data]))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'users_bulk_template.xlsx'
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch (e) { toast.error('Failed to download template') }
+}
+
+async function handleBulkUpload(e) {
+  const file = e.target.files[0]
+  if (!file) return
+  e.target.value = ''
+  const fd = new FormData()
+  fd.append('file', file)
+  bulkProgress.value = { show: true, percent: 0 }
+  const interval = setInterval(() => {
+    if (bulkProgress.value.percent < 90) bulkProgress.value.percent += 10
+  }, 150)
+  try {
+    const { data } = await api.post('/api/users/bulk', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+    clearInterval(interval)
+    bulkProgress.value.percent = 100
+    setTimeout(() => { bulkProgress.value.show = false }, 500)
+    toast.success(`Successfully added ${data.added} user(s)`)
+    load()
+  } catch (err) {
+    clearInterval(interval)
+    bulkProgress.value.show = false
+    toast.error(err.response?.data?.detail || 'Bulk upload failed')
+  }
 }
 
 watch([search, filterMode], () => { page.value = 1 })
