@@ -62,13 +62,25 @@
       <p class="text-xs text-gray-500">{{ summary.total_entries }} entries</p>
     </div>
 
+    <div v-if="expenses.length" class="flex justify-end">
+      <label class="flex items-center gap-2 text-xs text-gray-500">
+        Sort by
+        <select v-model="sortBy" class="border rounded px-2 py-1.5 text-sm text-gray-700 bg-white">
+          <option value="date-desc">Date: newest first</option>
+          <option value="date-asc">Date: oldest first</option>
+          <option value="amount-asc">Amount: lowest first</option>
+          <option value="amount-desc">Amount: highest first</option>
+        </select>
+      </label>
+    </div>
+
     <div v-if="expenses.length" class="bg-white border rounded-lg overflow-hidden">
       <div class="grid grid-cols-[1fr_auto] gap-3 px-4 py-2 bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
         <span>Expense</span>
         <span>Amount</span>
       </div>
       <button
-        v-for="e in expenses"
+        v-for="e in sortedExpenses"
         :key="e.id"
         @click="selectExpense(e)"
         class="w-full grid grid-cols-[1fr_auto] gap-3 items-center px-4 py-3 text-left border-t hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"
@@ -126,6 +138,7 @@ const year = ref(dt.getFullYear())
 const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 const years = [dt.getFullYear() - 1, dt.getFullYear(), dt.getFullYear() + 1]
 const expenses = ref([])
+const sortBy = ref('date-desc')
 const summary = ref(null)
 const showForm = ref(false)
 const editingId = ref(null)
@@ -150,6 +163,16 @@ const displayedPreview = computed(() => {
   if (removeBill.value) return ''
   return existingBillPreview.value
 })
+
+const sortedExpenses = computed(() => [...expenses.value].sort((a, b) => {
+  if (sortBy.value.startsWith('date')) {
+    const comparison = a.expense_date.localeCompare(b.expense_date)
+    return sortBy.value === 'date-asc' ? comparison : -comparison
+  }
+
+  const comparison = Number(a.amount) - Number(b.amount)
+  return sortBy.value === 'amount-asc' ? comparison : -comparison
+}))
 
 function openCamera() { cameraInput.value?.click() }
 function openGallery() { galleryInput.value?.click() }
