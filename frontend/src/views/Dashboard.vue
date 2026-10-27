@@ -182,6 +182,18 @@ function changeDate(delta) {
   loadData()
 }
 
+onMounted(async () => {
+  await loadData()
+  // ensure we start on a vote-open date if possible
+  if (!isDateVotingOpen(selectedDate.value)) {
+    const today = new Date().toISOString().split('T')[0]
+    if (isDateVotingOpen(today)) {
+      selectedDate.value = today
+      await loadData()
+    }
+  }
+})
+
 function pickDate() {
   const picked = dateInput.value?.value
   if (picked && picked !== selectedDate.value) {
