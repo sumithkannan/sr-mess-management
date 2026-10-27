@@ -30,26 +30,31 @@
       </button>
     </div>
 
-    <div class="bg-white rounded-lg border p-6 space-y-4">
-      <h2 class="font-semibold text-lg">Change Password</h2>
-      <form @submit.prevent="changePassword" class="space-y-3">
-        <div>
-          <label class="block text-sm text-gray-700 mb-1">Current Password</label>
-          <input v-model="form.current_password" type="password" required class="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        </div>
-        <div>
-          <label class="block text-sm text-gray-700 mb-1">New Password</label>
-          <input v-model="form.new_password" type="password" required minlength="6" class="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          <p class="text-xs text-gray-500 mt-1">Minimum 6 characters</p>
-        </div>
-        <div>
-          <label class="block text-sm text-gray-700 mb-1">Confirm New Password</label>
-          <input v-model="form.confirm_password" type="password" required minlength="6" class="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        </div>
-        <button type="submit" class="w-full bg-blue-600 text-white py-2.5 rounded text-sm hover:bg-blue-700">
-          Update Password
-        </button>
-      </form>
+    <div class="bg-white rounded-lg border p-6 space-y-3">
+      <button @click="showChangePassword = !showChangePassword" class="flex items-center justify-between w-full text-left">
+        <h2 class="font-semibold text-lg">Security</h2>
+        <span class="text-blue-600 text-sm">{{ showChangePassword ? 'Cancel' : 'Change Password' }}</span>
+      </button>
+      <div v-if="showChangePassword" class="pt-2 border-t space-y-3">
+        <form @submit.prevent="changePassword" class="space-y-3">
+          <div>
+            <label class="block text-sm text-gray-700 mb-1">Current Password</label>
+            <input v-model="form.current_password" type="password" required class="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm text-gray-700 mb-1">New Password</label>
+            <input v-model="form.new_password" type="password" required minlength="6" class="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <p class="text-xs text-gray-500 mt-1">Minimum 6 characters</p>
+          </div>
+          <div>
+            <label class="block text-sm text-gray-700 mb-1">Confirm New Password</label>
+            <input v-model="form.confirm_password" type="password" required minlength="6" class="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <button type="submit" class="w-full bg-blue-600 text-white py-2.5 rounded text-sm hover:bg-blue-700">
+            Update Password
+          </button>
+        </form>
+      </div>
     </div>
 
     <VersionTag />
@@ -71,6 +76,7 @@ const form = ref({
   new_password: '',
   confirm_password: ''
 })
+const showChangePassword = ref(false)
 
 async function changePassword() {
   if (form.value.new_password !== form.value.confirm_password) {
@@ -92,6 +98,7 @@ async function changePassword() {
       new_password: '',
       confirm_password: ''
     }
+    showChangePassword.value = false
   } catch (e) {
     toast.error(e.response?.data?.detail || 'Failed to change password')
   }
