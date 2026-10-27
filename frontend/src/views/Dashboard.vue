@@ -21,7 +21,7 @@
     </div>
 
     <div class="flex items-center gap-2 bg-white border rounded-lg px-3 py-2 shadow-sm">
-      <button @click="selectedDate = shiftDate(selectedDate, -1); loadData()"
+      <button @click="changeDate(-1)"
         class="text-lg text-gray-500 hover:text-gray-800 leading-none w-7 text-center">&#8249;</button>
       <div class="flex-1 text-center">
         <p class="text-xs text-gray-400">Menu for</p>
@@ -29,10 +29,11 @@
           class="text-sm font-semibold text-gray-800 cursor-pointer select-none">
           {{ formattedDate }}
         </span>
+        <p v-if="!isDateVotingOpen(selectedDate)" class="text-xs text-orange-600">Voting not open</p>
       </div>
-      <button @click="selectedDate = shiftDate(selectedDate, 1); loadData()"
+      <button @click="changeDate(1)"
         class="text-lg text-gray-500 hover:text-gray-800 leading-none w-7 text-center">&#8250;</button>
-      <input ref="dateInput" type="date" v-model="selectedDate" @change="loadData"
+      <input ref="dateInput" type="date" v-model="selectedDate" @change="pickDate"
         class="w-0 p-0 border-0 opacity-0 absolute" />
     </div>
 
@@ -105,7 +106,9 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import api from '../api'
+import { useToast } from '../composables/useToast'
 
+const toast = useToast()
 const selectedDate = ref(new Date().toISOString().split('T')[0])
 const mealTypes = ref([])
 const menuItems = ref([])
@@ -150,6 +153,44 @@ async function loadData() {
     offDays.value = offRes.data
   } catch (e) {
     console.error('Dashboard load error:', e)
+  }
+}
+
+function isDateVotingOpen(dateStr) {
+  if (offDays.value.find(o => dateStr >= o.start_date && dateStr <= o.end_date)) return false
+  const now = new Date()
+  for (const mt of mealTypes.value) {
+    if (!mt.start_time || mt.vote_cutoff_hours == null || mt.vote_open_interval_days == null) continue
+    const mealDate = new Date(dateStr + 'T00:00:00')
+    const open = new Date(mealDate.getTime() - mt.vote_open_interval_days * 86400000)
+    const [h, m] = mt.start_time.split(':')
+    mealDate.setHours(+h, +m, 0, 0)
+    const deadline = new Date(mealDate.getTime() - mt.vote_cutoff_hours * 3600000)
+    if (now >= open && now < deadline) return true
+  }
+  return false
+}
+
+function changeDate(delta) {
+  const newDate = shiftDate(selectedDate.value, delta)
+  if (delta > 0 && !isDateVotingOpen(newDate)) {
+    toast.info('Voting not open for this date')
+    return
+  }
+  selectedDate.value = newDate
+  loadData()
+}
+
+function pickDate() {
+  const picked = dateInput.value?.value
+  if (picked && picked !== selectedDate.value) {
+    if (picked > selectedDate.value && !isDateVotingOpen(picked)) {
+      toast.info('Voting not open for this date')
+      dateInput.value.value = selectedDate.value
+      return
+    }
+    selectedDate.value = picked
+    loadData()
   }
 }
 
