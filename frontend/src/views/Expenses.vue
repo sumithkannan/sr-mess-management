@@ -104,46 +104,90 @@ async function compressImage(file) {
       return
     }
     
+    if (file.type === 'image/heic' || file.type === 'image/heif' || file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif')) {
+      toast.error('HEIC images cannot be compressed in browser. Please convert to JPG/PNG or use a smaller image.')
+      imageFile.value = null
+      imagePreview.value = ''
+      imageSizeText.value = ''
+      compressing.value = false
+      return
+    }
+    
     toast.info('Image is compressing...')
     
     return new Promise((resolve) => {
       const img = new Image()
       img.onload = () => {
-        const canvas = document.createElement('canvas')
-        let width = img.width
-        let height = img.height
-        const maxDim = 1024
-        if (width > maxDim || height > maxDim) {
-          const ratio = Math.min(maxDim / width, maxDim / height)
-          width = Math.round(width * ratio)
-          height = Math.round(height * ratio)
+        const tryCompress = (maxDim, startQuality) => {
+          const canvas = document.createElement('canvas')
+          let width = img.width
+          let height = img.height
+          if (width > maxDim || height > maxDim) {
+            const ratio = Math.min(maxDim / width, maxDim / height)
+            width = Math.round(width * ratio)
+            height = Math.round(height * ratio)
+          }
+          canvas.width = width
+          canvas.height = height
+          const ctx = canvas.getContext('2d')
+          ctx.drawImage(img, 0, 0, width, height)
+          
+          const compress = (quality, dims) => {
+            canvas.toBlob((blob) => {
+              if (!blob) {
+                if (dims === 1024) tryCompress(800, 0.7)
+                else if (dims === 800) tryCompress(640, 0.6)
+                else if (dims === 640) tryCompress(512, 0.5)
+                else {
+                  toast.error("This photo is too large to compress. Lower your camera resolution in phone settings, or pick a smaller image from gallery.")
+                  imageFile.value = null
+                  imagePreview.value = ''
+                  imageSizeText.value = ''
+                  compressing.value = false
+                  resolve()
+                }
+                return
+              }
+              if (blob.size > maxSize && quality > 0.25) {
+                compress(quality - 0.1, dims)
+              } else if (blob.size > maxSize) {
+                if (dims === 1024) tryCompress(800, 0.7)
+                else if (dims === 800) tryCompress(640, 0.6)
+                else if (dims === 640) tryCompress(512, 0.5)
+                else {
+                  toast.error("This photo is too large to compress. Lower your camera resolution in phone settings, or pick a smaller image from gallery.")
+                  imageFile.value = null
+                  imagePreview.value = ''
+                  imageSizeText.value = ''
+                  compressing.value = false
+                  resolve()
+                }
+              } else {
+                const compressedFile = new File([blob], 'bill.jpg', { type: 'image/jpeg' })
+                imageFile.value = compressedFile
+                imagePreview.value = URL.createObjectURL(compressedFile)
+                imageSizeText.value = `Compressed: ${(blob.size/1024).toFixed(0)}KB`
+                compressing.value = false
+                resolve()
+              }
+            }, 'image/jpeg', quality)
+          }
+          compress(startQuality, maxDim)
         }
-        canvas.width = width
-        canvas.height = height
-        const ctx = canvas.getContext('2d')
-        ctx.drawImage(img, 0, 0, width, height)
-        
-        const compress = (quality) => {
-          canvas.toBlob((blob) => {
-            if (!blob) { resolve(); return }
-            if (blob.size > maxSize && quality > 0.3) {
-              compress(quality - 0.1)
-            } else {
-              const compressedFile = new File([blob], 'bill.jpg', { type: 'image/jpeg' })
-              imageFile.value = compressedFile
-              imagePreview.value = URL.createObjectURL(compressedFile)
-              imageSizeText.value = `Compressed: ${(blob.size/1024).toFixed(0)}KB (quality: ${(quality*100).toFixed(0)}%)`
-              compressing.value = false
-              resolve()
-            }
-          }, 'image/jpeg', quality)
-        }
-        compress(0.8)
+        tryCompress(800, 0.7)
+      }
+      img.onerror = () => {
+        toast.error("Couldn't compress this photo. Try lowering camera resolution or pick a smaller JPG/PNG from gallery.")
+        imageFile.value = null
+        imagePreview.value = ''
+        imageSizeText.value = ''
+        compressing.value = false
+        resolve()
       }
       img.src = URL.createObjectURL(file)
     })
   } catch (e) {
-    toast.error("Couldn't compress image. Please use a smaller JPG/PNG or pick from gallery.")
+    toast.error("Couldn't compress this photo. Try lowering camera resolution or pick a smaller JPG/PNG from gallery.")
     imageFile.value = null
     imagePreview.value = ''
     imageSizeText.value = ''
