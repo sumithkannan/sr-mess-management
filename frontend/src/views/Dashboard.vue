@@ -80,7 +80,7 @@
         </template>
       </div>
 
-      <div v-if="!isVotingOpen(mt)" class="px-4 py-3">
+      <div v-if="!isVotingOpen(mt) && itemsText(mt.id)" class="px-4 py-3">
         <div class="flex items-center justify-center gap-1"
           :class="canRate(mt) ? '' : 'pointer-events-none'"
           @mouseleave="onStarLeave(mt)">
