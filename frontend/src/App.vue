@@ -1,5 +1,6 @@
 <template>
   <div class="min-h-screen bg-gray-50">
+    <TopProgress />
     <TopHeader v-if="auth.isAuthenticated" />
     <main class="pb-20 px-4 pt-4 max-w-lg mx-auto w-full">
       <router-view :key="$route.fullPath" />
@@ -16,5 +17,6 @@ import TopHeader from './components/TopHeader.vue'
 import BottomNav from './components/BottomNav.vue'
 import Toast from './components/Toast.vue'
 import GlobalLoader from './components/GlobalLoader.vue'
+import TopProgress from './components/TopProgress.vue'
 const auth = useAuthStore()
 </script>

@@ -1,5 +1,10 @@
 <template>
   <div class="space-y-4">
+    <div v-if="loading" class="space-y-4">
+      <div class="h-12 bg-white rounded-lg border animate-pulse"></div>
+      <SkeletonCard v-for="i in 2" :key="i" />
+    </div>
+    <template v-else>
     <div v-if="dutyUsers.length" class="bg-green-50 border border-green-200 rounded-lg p-3">
       <p class="text-sm font-medium text-green-700">Mess Duty Today:</p>
       <p class="text-sm text-green-600">{{ dutyUsers.join(', ') }}</p>
@@ -101,6 +106,7 @@
     <div v-if="!mealTypes.length" class="text-center py-8 text-gray-400 text-sm">
       No meal types configured.
     </div>
+    </template>
   </div>
 </template>
 
@@ -108,8 +114,10 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import api from '../api'
 import { useToast } from '../composables/useToast'
+import SkeletonCard from '../components/SkeletonCard.vue'
 
 const toast = useToast()
+const loading = ref(true)
 const selectedDate = ref(new Date().toISOString().split('T')[0])
 const mealTypes = ref([])
 const menuItems = ref([])
@@ -134,6 +142,7 @@ const formattedDate = computed(() => {
 })
 
 async function loadData() {
+  loading.value = true
   try {
     const [mtRes, miRes, vRes, rRes, dutyRes, offRes] = await Promise.all([
       api.get('/api/meal-types'),
@@ -154,6 +163,8 @@ async function loadData() {
     offDays.value = offRes.data
   } catch (e) {
     console.error('Dashboard load error:', e)
+  } finally {
+    loading.value = false
   }
 }
 
