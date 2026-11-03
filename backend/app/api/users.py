@@ -132,6 +132,8 @@ def update_user(user_id: int, req: UserUpdate, db: Session = Depends(get_db), ad
 def suspend_user(user_id: int, db: Session = Depends(get_db), admin=Depends(admin_required)):
     user = db.query(User).filter(User.id == user_id).first()
     if not user: raise HTTPException(status_code=404)
+    if user.username == "admin" or user.role == "admin":
+        raise HTTPException(status_code=400, detail="Admin account cannot be suspended")
     user.is_active = False; db.commit()
     return {"message": "User suspended"}
 

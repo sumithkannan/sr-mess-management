@@ -24,6 +24,11 @@ def test_suspend_user(client, admin_headers):
     r = client.patch("/api/users/2/suspend", headers=admin_headers)
     assert r.status_code == 200
 
+def test_admin_account_cannot_be_suspended(client, admin_headers):
+    r = client.patch("/api/users/1/suspend", headers=admin_headers)
+    assert r.status_code == 400
+    assert r.json()["detail"] == "Admin account cannot be suspended"
+
 def test_activate_user(client, admin_headers):
     client.patch("/api/users/2/suspend", headers=admin_headers)
     r = client.patch("/api/users/2/activate", headers=admin_headers)
