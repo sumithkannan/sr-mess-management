@@ -75,14 +75,14 @@ jobs:
 
           files = Files()
 
-          def read_remote(path):
+          def read_remote(path, quiet=False):
               try:
                   data = files.path_get(path)
               except PythonAnywhereApiException as exc:
                   # A missing file is normal before the first install (status)
                   # or before the deploy uploads it (requirements).
                   message = str(exc)
-                  if "404" not in message and "No such file" not in message:
+                  if not quiet and "404" not in message and "No such file" not in message:
                       print(f"  cannot read {path}: {exc}")
                   return None
               # Directories come back as dicts; files as bytes.
@@ -125,6 +125,45 @@ jobs:
           if status.get("status") == "ok" and status.get("requirements_sha256") == digest:
               print("::notice::dependencies already installed for this requirements.txt")
               sys.exit(0)
+
+          # Diagnostics: distinguish "the deploy is stale" (so the installer is
+          # not in the deployed code) from "the installer did not run".
+          main_source = read_remote(f"{repo_root}/backend/app/main.py")
+          if main_source is None:
+              sys.exit(
+                  "::error::backend/app/main.py not found on PythonAnywhere — "
+                  "run the deploy workflow first"
+              )
+          if b"ensure_dependencies" not in main_source:
+              sys.exit(
+                  "::error::the deployed backend/app/main.py does not call the "
+                  "dependency installer — run the deploy workflow first"
+              )
+
+          stamp_raw = read_remote(f"{repo_root}/backend/deploy_stamp.json")
+          deployed_commit = "unknown"
+          if stamp_raw:
+              try:
+                  deployed_commit = json.loads(stamp_raw.decode("utf-8")).get("commit", "unknown")
+              except ValueError:
+                  pass
+          workflow_commit = os.environ.get("GITHUB_SHA", "")
+          print(f"deployed    : {deployed_commit}")
+          print(f"workflow    : {workflow_commit or 'unknown'}")
+          if deployed_commit != "unknown" and workflow_commit and deployed_commit != workflow_commit:
+              print(
+                  "::warning::the deployed commit differs from this workflow run — "
+                  "run the deploy workflow first"
+              )
+
+          # Best effort: show which WSGI file the site uses (import lines only,
+          # so secrets set in that file are not printed).
+          wsgi_source = read_remote(f"/var/www/{user}_pythonanywhere_com_wsgi.py", quiet=True)
+          if wsgi_source:
+              print("wsgi entry  :")
+              for line in wsgi_source.decode("utf-8", "replace").splitlines():
+                  if line.strip() and ("import" in line or "application" in line):
+                      print(f"  {line.strip()}")
 
           # The deploy workflow uploads files, so wait (briefly) until the copy
           # on PythonAnywhere matches this commit. This keeps the two workflows

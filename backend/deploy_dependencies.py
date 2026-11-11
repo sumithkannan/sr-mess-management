@@ -23,12 +23,23 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 REQUIREMENTS_PATH = os.path.join(BASE_DIR, "requirements.txt")
 STATUS_PATH = os.path.join(BASE_DIR, "deploy_dependencies.json")
 LOCK_PATH = os.path.join(BASE_DIR, ".deploy_dependencies.lock")
+STAMP_PATH = os.path.join(BASE_DIR, "deploy_stamp.json")
 TIMEOUT_SECONDS = 600
 
 
-def running_on_pythonanywhere() -> bool:
-    # Both variables are set automatically by PythonAnywhere.
-    return bool(os.environ.get("PYTHONANYWHERE_DOMAIN") or os.environ.get("PYTHONANYWHERE_SITE"))
+def is_deployed_environment() -> bool:
+    """True when this checkout is a live deployment that may install packages.
+
+    PythonAnywhere sets PYTHONANYWHERE_DOMAIN / PYTHONANYWHERE_SITE for
+    consoles, but not reliably for web-app workers, so do not depend on them
+    alone. The deploy workflow writes ``deploy_stamp.json`` next to
+    ``requirements.txt`` on every deploy; its presence marks a deployed
+    checkout. Requiring Linux keeps local Windows/macOS checkouts from ever
+    running pip, even if such a file is left behind.
+    """
+    if os.environ.get("PYTHONANYWHERE_DOMAIN") or os.environ.get("PYTHONANYWHERE_SITE"):
+        return True
+    return sys.platform.startswith("linux") and os.path.isfile(STAMP_PATH)
 
 
 def _sha256(path: str) -> str:
@@ -62,7 +73,7 @@ def _is_installed(digest: str) -> bool:
 
 
 def ensure_dependencies() -> None:
-    if not running_on_pythonanywhere() or not os.path.isfile(REQUIREMENTS_PATH):
+    if not is_deployed_environment() or not os.path.isfile(REQUIREMENTS_PATH):
         return
 
     digest = _sha256(REQUIREMENTS_PATH)
