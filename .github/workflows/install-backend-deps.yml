@@ -202,7 +202,10 @@ jobs:
                       saw_installing = True
                   continue
               if state == "ok":
-                  print("::notice::dependencies installed successfully")
+                  print(
+                      "::notice::dependencies installed successfully "
+                      f"(via {status.get('attempt', 'unknown')})"
+                  )
                   print(status.get("output", "")[-2000:])
                   sys.exit(0)
               print("::error::pip install failed on PythonAnywhere")

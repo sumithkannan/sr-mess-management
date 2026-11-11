@@ -112,3 +112,75 @@ def test_detects_pythonanywhere_environment(monkeypatch):
     monkeypatch.setenv("PYTHONANYWHERE_SITE", "www.pythonanywhere.com")
 
     assert dd.is_deployed_environment() is True
+
+
+def test_pip_environment_injects_and_clears_proxy(monkeypatch):
+    monkeypatch.setenv("HTTPS_PROXY", "http://inherited.example:8080")
+    monkeypatch.setenv("CUSTOM_SETTING", "keep-me")
+
+    proxied = dd.pip_environment(dd.PROXY_URL)
+    assert proxied["HTTPS_PROXY"] == dd.PROXY_URL
+    assert proxied["HTTP_PROXY"] == dd.PROXY_URL
+    assert proxied["https_proxy"] == dd.PROXY_URL
+    assert proxied["http_proxy"] == dd.PROXY_URL
+    # Unrelated variables are preserved.
+    assert proxied["CUSTOM_SETTING"] == "keep-me"
+
+    direct = dd.pip_environment(None)
+    for name in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
+        assert name not in direct
+
+
+def test_installs_through_proxy_first(tmp_path, monkeypatch):
+    _, status_path = _setup_paths(tmp_path, monkeypatch)
+    monkeypatch.setattr(dd, "is_deployed_environment", lambda: True)
+    envs = []
+
+    def fake_run(args, **kwargs):
+        envs.append(kwargs["env"])
+        return FakeResult(0)
+
+    monkeypatch.setattr(dd.subprocess, "run", fake_run)
+    dd.ensure_dependencies()
+
+    assert len(envs) == 1, "a successful proxy attempt must not fall back"
+    assert envs[0]["HTTPS_PROXY"] == dd.PROXY_URL
+    status = json.loads(status_path.read_text())
+    assert status["status"] == "ok"
+    assert status["attempt"] == "proxy"
+
+
+def test_falls_back_to_direct_when_proxy_fails(tmp_path, monkeypatch):
+    _, status_path = _setup_paths(tmp_path, monkeypatch)
+    monkeypatch.setattr(dd, "is_deployed_environment", lambda: True)
+    envs = []
+
+    def fake_run(args, **kwargs):
+        envs.append(kwargs["env"])
+        return FakeResult(0) if len(envs) == 2 else FakeResult(1, "", "proxy unreachable")
+
+    monkeypatch.setattr(dd.subprocess, "run", fake_run)
+    dd.ensure_dependencies()
+
+    assert len(envs) == 2
+    assert envs[0]["HTTPS_PROXY"] == dd.PROXY_URL
+    assert "HTTPS_PROXY" not in envs[1]
+    status = json.loads(status_path.read_text())
+    assert status["status"] == "ok"
+    assert status["attempt"] == "direct"
+    # Both attempts are kept for troubleshooting.
+    assert "proxy unreachable" in status["output"]
+
+
+def test_records_both_attempts_when_all_fail(tmp_path, monkeypatch):
+    _, status_path = _setup_paths(tmp_path, monkeypatch)
+    monkeypatch.setattr(dd, "is_deployed_environment", lambda: True)
+    monkeypatch.setattr(dd.subprocess, "run", lambda *a, **k: FakeResult(1, "", "no route"))
+
+    dd.ensure_dependencies()
+
+    status = json.loads(status_path.read_text())
+    assert status["status"] == "error"
+    assert status["attempt"] == "none"
+    assert "pip via proxy" in status["output"]
+    assert "pip via direct" in status["output"]

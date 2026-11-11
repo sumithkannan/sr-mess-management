@@ -8,6 +8,11 @@ packages, so it runs whatever the WSGI entry point is — and records the result
 in ``deploy_dependencies.json``; the "Install backend dependencies" GitHub
 workflow reloads the site and waits for that file.
 
+Free PythonAnywhere accounts have no direct outbound internet from web-app
+workers, so pip reaches PyPI through the platform proxy
+(``http://proxy.server:3128``). Paid accounts have direct access, so the
+installer tries the proxy first and falls back to a direct connection.
+
 This module must only use the standard library, because it runs before the
 application (and its dependencies) is imported.
 """
@@ -24,7 +29,16 @@ REQUIREMENTS_PATH = os.path.join(BASE_DIR, "requirements.txt")
 STATUS_PATH = os.path.join(BASE_DIR, "deploy_dependencies.json")
 LOCK_PATH = os.path.join(BASE_DIR, ".deploy_dependencies.lock")
 STAMP_PATH = os.path.join(BASE_DIR, "deploy_stamp.json")
-TIMEOUT_SECONDS = 600
+PROXY_URL = "http://proxy.server:3128"
+TIMEOUT_SECONDS = 300
+PROXY_ENV_VARS = (
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "all_proxy",
+)
 
 
 def is_deployed_environment() -> bool:
@@ -72,6 +86,46 @@ def _is_installed(digest: str) -> bool:
     return status.get("status") == "ok" and status.get("requirements_sha256") == digest
 
 
+def pip_environment(proxy: str | None) -> dict:
+    """Environment for a pip run.
+
+    Any proxy inherited from the platform is dropped so the two attempts are
+    truly different: ``proxy`` (free accounts) and direct (paid accounts).
+    """
+    env = os.environ.copy()
+    for name in PROXY_ENV_VARS:
+        env.pop(name, None)
+    if proxy:
+        for name in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
+            env[name] = proxy
+    return env
+
+
+def run_pip(proxy: str | None) -> tuple[int, str]:
+    """Run pip once, through ``proxy`` when given. Returns (returncode, output)."""
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--disable-pip-version-check",
+            "--retries",
+            "2",
+            "--timeout",
+            "30",
+            "-r",
+            REQUIREMENTS_PATH,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=TIMEOUT_SECONDS,
+        env=pip_environment(proxy),
+    )
+    output = (result.stdout or "") + (result.stderr or "")
+    return result.returncode, output
+
+
 def ensure_dependencies() -> None:
     if not is_deployed_environment() or not os.path.isfile(REQUIREMENTS_PATH):
         return
@@ -104,28 +158,37 @@ def ensure_dependencies() -> None:
             "status": "installing",
             "started_at": datetime.now(timezone.utc).isoformat(),
         })
-        try:
-            result = subprocess.run(
-                [sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "-r", REQUIREMENTS_PATH],
-                capture_output=True,
-                text=True,
-                timeout=TIMEOUT_SECONDS,
-            )
-            returncode = result.returncode
-            output = (result.stdout or "") + (result.stderr or "")
-        except Exception as exc:  # timeout, missing pip, ...
-            returncode = -1
-            output = f"{type(exc).__name__}: {exc}"
+
+        # Free accounts reach PyPI only through the platform proxy; paid
+        # accounts have direct access. Try the proxy first and fall back.
+        attempts = (("proxy", PROXY_URL), ("direct", None))
+        returncode = -1
+        output = ""
+        used = None
+        logs = []
+        for label, proxy in attempts:
+            _log(f"running pip via {label}")
+            try:
+                returncode, output = run_pip(proxy)
+            except Exception as exc:  # timeout, missing pip, ...
+                returncode = -1
+                output = f"{type(exc).__name__}: {exc}"
+            logs.append(f"--- pip via {label} (exit {returncode}) ---\n{output}")
+            if returncode == 0:
+                used = label
+                break
+            _log(f"pip via {label} failed with exit code {returncode}")
 
         _write_status({
             "requirements_sha256": digest,
             "status": "ok" if returncode == 0 else "error",
             "returncode": returncode,
+            "attempt": used or "none",
             "installed_at": datetime.now(timezone.utc).isoformat(),
-            "output": output[-6000:],
+            "output": "\n".join(logs)[-6000:],
         })
         if returncode == 0:
-            _log("requirements installed")
+            _log(f"requirements installed via {used}")
         else:
             _log(f"pip failed with exit code {returncode}; see {STATUS_PATH}")
     finally:
