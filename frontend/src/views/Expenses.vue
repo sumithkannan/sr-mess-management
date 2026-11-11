@@ -129,21 +129,23 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import api from '../api'
 import { useToast } from '../composables/useToast'
+import { todayStr } from '../utils/time'
 
 const toast = useToast()
 
-const dt = new Date()
-const month = ref(dt.getMonth() + 1)
-const year = ref(dt.getFullYear())
+const today = todayStr()
+const [todayYear, todayMonth] = today.split('-').map(Number)
+const month = ref(todayMonth)
+const year = ref(todayYear)
 const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-const years = [dt.getFullYear() - 1, dt.getFullYear(), dt.getFullYear() + 1]
+const years = [todayYear - 1, todayYear, todayYear + 1]
 const expenses = ref([])
 const sortBy = ref('date-desc')
 const summary = ref(null)
 const showForm = ref(false)
 const editingId = ref(null)
 const selectedExpense = ref(null)
-const form = ref({ description: '', amount: '', category: '', expense_date: new Date().toISOString().split('T')[0] })
+const form = ref({ description: '', amount: '', category: '', expense_date: todayStr() })
 
 const cameraInput = ref(null)
 const galleryInput = ref(null)
@@ -190,7 +192,7 @@ function resetImageState() {
 function resetForm() {
   showForm.value = false
   editingId.value = null
-  form.value = { description: '', amount: '', category: '', expense_date: new Date().toISOString().split('T')[0] }
+  form.value = { description: '', amount: '', category: '', expense_date: todayStr() }
   resetImageState()
 }
 
@@ -198,7 +200,7 @@ function toggleForm() {
   if (showForm.value) resetForm()
   else {
     editingId.value = null
-    form.value = { description: '', amount: '', category: '', expense_date: new Date().toISOString().split('T')[0] }
+    form.value = { description: '', amount: '', category: '', expense_date: todayStr() }
     resetImageState()
     showForm.value = true
   }

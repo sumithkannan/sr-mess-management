@@ -5,6 +5,7 @@ from ..dependencies import get_db, get_current_user
 from ..models.vote import Vote
 from ..models.menu import MealType
 from ..schemas.vote import VoteCreate, VoteResponse
+from ..timeutils import local_now, local_datetime
 
 router = APIRouter(prefix="/api/votes", tags=["Votes"])
 
@@ -12,16 +13,15 @@ def get_vote_window(meal_type_id: int, meal_date: date, db: Session):
     mt = db.query(MealType).filter(MealType.id == meal_type_id).first()
     if not mt or not mt.start_time or mt.vote_cutoff_hours is None or mt.vote_open_interval_days is None:
         return None, None
-    open_dt = datetime.combine(meal_date - timedelta(days=mt.vote_open_interval_days), datetime.min.time())
-    deadline = datetime.combine(meal_date, mt.start_time) - timedelta(hours=mt.vote_cutoff_hours)
+    open_dt = local_datetime(meal_date - timedelta(days=mt.vote_open_interval_days), datetime.min.time())
+    deadline = local_datetime(meal_date, mt.start_time) - timedelta(hours=mt.vote_cutoff_hours)
     return open_dt, deadline
 
 def check_voting_open(meal_type_id: int, meal_date: date, db: Session) -> bool:
     open_dt, deadline = get_vote_window(meal_type_id, meal_date, db)
     if not open_dt or not deadline:
         return False
-    now = datetime.now()
-    return open_dt <= now < deadline
+    return open_dt <= local_now() < deadline
 
 @router.get("/date/{vote_date}", response_model=list[VoteResponse])
 def get_votes_by_date(vote_date: date, db: Session = Depends(get_db)):

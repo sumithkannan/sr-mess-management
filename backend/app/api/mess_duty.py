@@ -5,6 +5,7 @@ from ..dependencies import get_db, admin_required
 from ..models.mess_duty import MessDutyAssignment
 from ..models.user import User
 from ..schemas.mess_duty import MessDutyCreate, MessDutyUpdate, MessDutyResponse
+from ..timeutils import local_now
 
 router = APIRouter(prefix="/api/mess-duty", tags=["Mess Duty"])
 
@@ -26,7 +27,7 @@ def _get_duty_users_for_date(target_date: date, db: Session):
 
 @router.get("/current")
 def get_current_duty_users(db: Session = Depends(get_db)):
-    return _get_duty_users_for_date(date.today(), db)
+    return _get_duty_users_for_date(local_now().date(), db)
 
 @router.get("/on-date/{target_date}")
 def get_duty_users_on_date(target_date: date, db: Session = Depends(get_db)):

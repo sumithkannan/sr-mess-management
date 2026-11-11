@@ -46,9 +46,10 @@ const toast = useToast()
 import { ref } from 'vue'
 import api from '../api'
 import { useToast } from '../composables/useToast'
+import { todayStr } from '../utils/time'
 
-const dateFrom = ref(new Date(Date.now() - 7*86400000).toISOString().split('T')[0])
-const dateTo = ref(new Date().toISOString().split('T')[0])
+const dateFrom = ref(todayStr(new Date(Date.now() - 7*86400000)))
+const dateTo = ref(todayStr())
 const activeReport = ref('')
 const reportData = ref([])
 const reportHeaders = ref([])

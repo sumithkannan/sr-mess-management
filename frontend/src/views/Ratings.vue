@@ -41,8 +41,9 @@ const toast = useToast()
 import { ref, reactive, onMounted, watch } from 'vue'
 import api from '../api'
 import { useToast } from '../composables/useToast'
+import { todayStr, zonedTimestamp } from '../utils/time'
 
-const selectedDate = ref(new Date().toISOString().split('T')[0])
+const selectedDate = ref(todayStr())
 const mealTypes = ref([])
 const menuItems = ref([])
 const myRatings = ref({})
@@ -73,16 +74,14 @@ function getItems(mtId) { return menuItems.value.filter(i => i.meal_type_id === 
 
 function getRatingStart(mt) {
   if (!mt.end_time || mt.rating_start_hours == null) return null
-  const d = new Date(selectedDate.value + 'T00:00:00')
-  const [h, m] = mt.end_time.split(':')
-  d.setHours(+h, +m, 0, 0)
-  return new Date(d.getTime() + mt.rating_start_hours * 3600000)
+  const [h, m] = mt.end_time.split(':').map(Number)
+  return new Date(zonedTimestamp(selectedDate.value, h, m) + mt.rating_start_hours * 3600000)
 }
 
 function isRatingOpen(mt) {
   const start = getRatingStart(mt)
   if (!start) return false
-  return new Date() >= start
+  return Date.now() >= start.getTime()
 }
 
 function hasVoted(mtId) {

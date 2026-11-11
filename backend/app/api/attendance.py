@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from datetime import date, datetime, timedelta
+from datetime import date
 from ..dependencies import get_db, get_current_user, mess_duty_or_admin
 from ..models.attendance import Attendance
 from ..models.vote import Vote
 from ..models.menu import MealType
 from ..schemas.attendance import AttendanceCreate, AttendanceBatchCreate, AttendanceResponse
+from ..timeutils import local_now, meal_window
 
 router = APIRouter(prefix="/api/attendance", tags=["Attendance"])
 
@@ -13,10 +14,9 @@ def check_attendance_open(meal_type_id: int, meal_date: date, db: Session) -> bo
     mt = db.query(MealType).filter(MealType.id == meal_type_id).first()
     if not mt or not mt.start_time or not mt.end_time:
         return False
-    start = datetime.combine(meal_date, mt.start_time) - timedelta(hours=mt.attendance_buffer_hours or 1)
-    end = datetime.combine(meal_date, mt.end_time) + timedelta(hours=mt.attendance_buffer_hours or 1)
-    now = datetime.now()
-    return start <= now < end
+    buffer_hours = mt.attendance_buffer_hours if mt.attendance_buffer_hours is not None else 1
+    start, end = meal_window(meal_date, mt.start_time, mt.end_time, buffer_hours)
+    return start <= local_now() < end
 
 @router.get("/date/{att_date}/{meal_type_id}", response_model=list[AttendanceResponse])
 def get_attendance(att_date: date, meal_type_id: int, db: Session = Depends(get_db),

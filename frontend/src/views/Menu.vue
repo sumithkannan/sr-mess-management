@@ -103,12 +103,13 @@ import { onBeforeRouteLeave } from 'vue-router'
 import api from '../api'
 import { useToast } from '../composables/useToast'
 import { useAuthStore } from '../stores/auth'
+import { todayStr } from '../utils/time'
 const auth = useAuthStore()
 
 const mealTypes = ref([])
 const dateItems = ref([])
 const recurringItems = ref([])
-const viewDate = ref(new Date().toISOString().split('T')[0])
+const viewDate = ref(todayStr())
 const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
 const recurringInputs = reactive({})
 

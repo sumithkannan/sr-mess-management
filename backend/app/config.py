@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     DATABASE_URL: str = f"sqlite:///{os.path.join(BASE_DIR, 'mess.db')}"
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
+    # Business timezone used to interpret meal start/end times.
+    # Servers (e.g. PythonAnywhere) run in UTC, so windows must not use the
+    # server's local clock.
+    TIMEZONE: str = "Asia/Kolkata"
 
     class Config:
         env_file = os.path.join(BASE_DIR, ".env")

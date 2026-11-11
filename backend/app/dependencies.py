@@ -5,6 +5,7 @@ from jose import JWTError, jwt
 from .database import SessionLocal
 from .config import settings
 from .models.user import User
+from .timeutils import local_now
 
 security = HTTPBearer()
 
@@ -41,12 +42,12 @@ def mess_duty_or_admin(current_user: User = Depends(get_current_user)) -> User:
     if current_user.role == "admin":
         return current_user
     from .models.mess_duty import MessDutyAssignment
-    from datetime import date
     db = SessionLocal()
+    today = local_now().date()
     has_duty = db.query(MessDutyAssignment).filter(
         MessDutyAssignment.user_id == current_user.id,
-        MessDutyAssignment.start_date <= date.today(),
-        MessDutyAssignment.end_date >= date.today()
+        MessDutyAssignment.start_date <= today,
+        MessDutyAssignment.end_date >= today
     ).first()
     db.close()
     if not has_duty:

@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from ..dependencies import get_db, get_current_user
 from ..models.rating import Rating
 from ..models.menu import MealType
 from ..models.vote import Vote
 from ..schemas.rating import RatingCreate, RatingResponse
+from ..timeutils import local_now, local_datetime
 
 router = APIRouter(prefix="/api/ratings", tags=["Ratings"])
 
@@ -13,13 +14,13 @@ def get_rating_start(meal_type_id: int, meal_date: date, db: Session):
     mt = db.query(MealType).filter(MealType.id == meal_type_id).first()
     if not mt or not mt.end_time or mt.rating_start_hours is None:
         return None
-    start = datetime.combine(meal_date, mt.end_time)
+    start = local_datetime(meal_date, mt.end_time)
     return start + timedelta(hours=mt.rating_start_hours)
 
 def check_rating_open(meal_type_id: int, meal_date: date, db: Session) -> bool:
     start = get_rating_start(meal_type_id, meal_date, db)
     if not start: return False
-    return datetime.now() >= start
+    return local_now() >= start
 
 @router.get("/date/{rating_date}", response_model=list[RatingResponse])
 def get_ratings(rating_date: date, db: Session = Depends(get_db)):

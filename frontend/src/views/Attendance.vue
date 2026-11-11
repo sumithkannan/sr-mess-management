@@ -100,9 +100,10 @@ import { ref, reactive, computed, onMounted, watch } from 'vue'
 import api from '../api'
 import { useToast } from '../composables/useToast'
 import { useAuthStore } from '../stores/auth'
+import { todayStr, mealWindow, APP_TIMEZONE } from '../utils/time'
 
 const auth = useAuthStore()
-const attDate = ref(new Date().toISOString().split('T')[0])
+const attDate = ref(todayStr())
 const selectedMealType = ref('')
 const mealTypes = ref([])
 const users = ref([])
@@ -117,26 +118,22 @@ const selectedMealTypeObj = computed(() => mealTypes.value.find(m => m.id === +s
 
 function getAttendanceWindow(mt) {
   if (!mt || !mt.start_time || !mt.end_time || mt.attendance_buffer_hours == null) return null
-  const d = new Date(attDate.value + 'T00:00:00')
-  const [sh, sm] = mt.start_time.split(':')
-  const [eh, em] = mt.end_time.split(':')
-  const buf = mt.attendance_buffer_hours * 3600000
-  const start = new Date(d.getTime() + (+sh * 3600000 + +sm * 60000) - buf)
-  const end = new Date(d.getTime() + (+eh * 3600000 + +em * 60000) + buf)
-  return { start, end }
+  return mealWindow(attDate.value, mt.start_time, mt.end_time, mt.attendance_buffer_hours)
 }
 
 const attendanceWindow = computed(() => getAttendanceWindow(selectedMealTypeObj.value))
 
 const isAttendanceOpen = computed(() => {
   if (!attendanceWindow.value) return false
-  const now = new Date()
-  return now >= attendanceWindow.value.start && now < attendanceWindow.value.end
+  const now = Date.now()
+  return now >= attendanceWindow.value.start.getTime() && now < attendanceWindow.value.end.getTime()
 })
 
 const attendanceWindowStart = computed(() => {
   if (!attendanceWindow.value) return ''
-  return attendanceWindow.value.start.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+  return attendanceWindow.value.start.toLocaleTimeString('en-IN', {
+    hour: '2-digit', minute: '2-digit', timeZone: APP_TIMEZONE
+  })
 })
 
 const filters = [
