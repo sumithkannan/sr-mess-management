@@ -148,13 +148,21 @@ jobs:
           reload_site()
 
           deadline = time.time() + 900
+          health_status = None
+          saw_installing = False
           while time.time() < deadline:
               time.sleep(5)
-              poke_health()  # make sure the app has started
+              health_status = poke_health()  # make sure the app has started
               status = read_status()
               if status.get("requirements_sha256") != digest:
                   continue
-              if status.get("status") == "ok":
+              state = status.get("status")
+              if state == "installing":
+                  if not saw_installing:
+                      print("installer is running on PythonAnywhere...", flush=True)
+                      saw_installing = True
+                  continue
+              if state == "ok":
                   print("::notice::dependencies installed successfully")
                   print(status.get("output", "")[-2000:])
                   sys.exit(0)
@@ -162,7 +170,12 @@ jobs:
               print(status.get("output", ""))
               sys.exit(1)
 
-          sys.exit("::error::timed out waiting for the dependency installer")
+          sys.exit(
+              "::error::timed out waiting for the dependency installer "
+              f"(last status: {status.get('status') or 'no status file'}, "
+              f"app health: {health_status or 'unreachable'}). "
+              "Check the PythonAnywhere error log."
+          )
           PY
 
       - name: Summary

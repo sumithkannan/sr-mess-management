@@ -2,9 +2,11 @@
 
 PythonAnywhere's API cannot start a console headlessly (``send_input`` returns
 412 until the console has been opened in a browser), so CI cannot run ``pip``
-directly. Instead the web app installs changed requirements on startup and
-records the result in ``deploy_dependencies.json``; the "Install backend
-dependencies" GitHub workflow reloads the site and waits for that file.
+directly. Instead the web app installs changed requirements on startup —
+``app.main`` calls :func:`ensure_dependencies` before importing third-party
+packages, so it runs whatever the WSGI entry point is — and records the result
+in ``deploy_dependencies.json``; the "Install backend dependencies" GitHub
+workflow reloads the site and waits for that file.
 
 This module must only use the standard library, because it runs before the
 application (and its dependencies) is imported.
@@ -83,6 +85,14 @@ def ensure_dependencies() -> None:
             return
 
         _log(f"installing {REQUIREMENTS_PATH}")
+        # Record that an install is in progress. If the worker is killed
+        # mid-pip the next startup sees a non-"ok" status and retries; the
+        # workflow can also tell "never started" from "still running".
+        _write_status({
+            "requirements_sha256": digest,
+            "status": "installing",
+            "started_at": datetime.now(timezone.utc).isoformat(),
+        })
         try:
             result = subprocess.run(
                 [sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "-r", REQUIREMENTS_PATH],

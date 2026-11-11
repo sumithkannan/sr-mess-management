@@ -1,15 +1,10 @@
 import os
 import sys
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, BASE_DIR)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Install changed requirements before importing the application, so newly
-# added packages are available on the first start after a deploy.
-from deploy_dependencies import ensure_dependencies
-
-ensure_dependencies()
-
+# app.main installs changed requirements before importing third-party
+# packages, so this entry point stays a plain import.
 from app.main import app
 
 application = app

@@ -1,10 +1,25 @@
+import os
+import sys
+
+# Install changed requirements before the third-party imports below, so a
+# package added in the latest deploy exists on the first start. This must stay
+# above the FastAPI imports and works regardless of which WSGI entry point the
+# site uses. It is a no-op outside PythonAnywhere and when requirements are
+# unchanged.
+_BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _BACKEND_DIR not in sys.path:
+    sys.path.insert(0, _BACKEND_DIR)
+
+from deploy_dependencies import ensure_dependencies  # noqa: E402
+
+ensure_dependencies()
+
 import logging
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect, text
-import os
 from .database import engine, Base
 from .api import auth, users, menu, votes, attendance, ratings, mess_duty, expenses, reports, configurations, off_days, version
 from .services.auth_service import seed_admin

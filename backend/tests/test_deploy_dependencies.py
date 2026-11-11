@@ -57,6 +57,22 @@ def test_skips_when_hash_already_installed(tmp_path, monkeypatch):
     dd.ensure_dependencies()
 
 
+def test_marks_status_installing_while_pip_runs(tmp_path, monkeypatch):
+    _, status_path = _setup_paths(tmp_path, monkeypatch)
+    monkeypatch.setattr(dd, "running_on_pythonanywhere", lambda: True)
+    seen = {}
+
+    def fake_run(*args, **kwargs):
+        seen.update(json.loads(status_path.read_text()))
+        return FakeResult(0)
+
+    monkeypatch.setattr(dd.subprocess, "run", fake_run)
+    dd.ensure_dependencies()
+
+    assert seen["status"] == "installing"
+    assert json.loads(status_path.read_text())["status"] == "ok"
+
+
 def test_records_pip_failure(tmp_path, monkeypatch):
     _, status_path = _setup_paths(tmp_path, monkeypatch)
     monkeypatch.setattr(dd, "running_on_pythonanywhere", lambda: True)
