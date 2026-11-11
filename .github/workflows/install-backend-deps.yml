@@ -79,7 +79,11 @@ jobs:
               try:
                   data = files.path_get(path)
               except PythonAnywhereApiException as exc:
-                  print(f"  cannot read {path}: {exc}")
+                  # A missing file is normal before the first install (status)
+                  # or before the deploy uploads it (requirements).
+                  message = str(exc)
+                  if "404" not in message and "No such file" not in message:
+                      print(f"  cannot read {path}: {exc}")
                   return None
               # Directories come back as dicts; files as bytes.
               return data if isinstance(data, bytes) else None
@@ -125,18 +129,20 @@ jobs:
           # The deploy workflow uploads files, so wait (briefly) until the copy
           # on PythonAnywhere matches this commit. This keeps the two workflows
           # independent without ever installing stale requirements.
-          print("waiting for backend/requirements.txt to match this commit...", flush=True)
-          deadline = time.time() + 600
-          while time.time() < deadline:
-              raw = read_remote(requirements_remote)
-              if raw is not None and hashlib.sha256(raw).hexdigest() == digest:
-                  break
-              time.sleep(10)
-          else:
-              sys.exit(
-                  "::error::backend/requirements.txt on PythonAnywhere does not match "
-                  "this commit — run the deploy workflow first"
-              )
+          raw = read_remote(requirements_remote)
+          if raw is None or hashlib.sha256(raw).hexdigest() != digest:
+              print("waiting for backend/requirements.txt to match this commit...", flush=True)
+              deadline = time.time() + 600
+              while time.time() < deadline:
+                  time.sleep(10)
+                  raw = read_remote(requirements_remote)
+                  if raw is not None and hashlib.sha256(raw).hexdigest() == digest:
+                      break
+              else:
+                  sys.exit(
+                      "::error::backend/requirements.txt on PythonAnywhere does not match "
+                      "this commit — run the deploy workflow first"
+                  )
 
           print("reloading web app to trigger the installer...", flush=True)
           reload_site()
