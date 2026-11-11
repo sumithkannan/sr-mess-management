@@ -1,0 +1,121 @@
+"""Install requirements.txt automatically when the PythonAnywhere web app starts.
+
+PythonAnywhere's API cannot start a console headlessly (``send_input`` returns
+412 until the console has been opened in a browser), so CI cannot run ``pip``
+directly. Instead the web app installs changed requirements on startup and
+records the result in ``deploy_dependencies.json``; the "Install backend
+dependencies" GitHub workflow reloads the site and waits for that file.
+
+This module must only use the standard library, because it runs before the
+application (and its dependencies) is imported.
+"""
+
+import hashlib
+import json
+import os
+import subprocess
+import sys
+from datetime import datetime, timezone
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+REQUIREMENTS_PATH = os.path.join(BASE_DIR, "requirements.txt")
+STATUS_PATH = os.path.join(BASE_DIR, "deploy_dependencies.json")
+LOCK_PATH = os.path.join(BASE_DIR, ".deploy_dependencies.lock")
+TIMEOUT_SECONDS = 600
+
+
+def running_on_pythonanywhere() -> bool:
+    # Both variables are set automatically by PythonAnywhere.
+    return bool(os.environ.get("PYTHONANYWHERE_DOMAIN") or os.environ.get("PYTHONANYWHERE_SITE"))
+
+
+def _sha256(path: str) -> str:
+    with open(path, "rb") as fh:
+        return hashlib.sha256(fh.read()).hexdigest()
+
+
+def _read_status() -> dict:
+    try:
+        with open(STATUS_PATH, encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _write_status(status: dict) -> None:
+    tmp_path = STATUS_PATH + ".tmp"
+    with open(tmp_path, "w", encoding="utf-8") as fh:
+        json.dump(status, fh, indent=2)
+    os.replace(tmp_path, STATUS_PATH)
+
+
+def _log(message: str) -> None:
+    print(f"[dependencies] {message}", file=sys.stderr, flush=True)
+
+
+def _is_installed(digest: str) -> bool:
+    status = _read_status()
+    return status.get("status") == "ok" and status.get("requirements_sha256") == digest
+
+
+def ensure_dependencies() -> None:
+    if not running_on_pythonanywhere() or not os.path.isfile(REQUIREMENTS_PATH):
+        return
+
+    digest = _sha256(REQUIREMENTS_PATH)
+    if _is_installed(digest):
+        return
+
+    lock = None
+    try:
+        import fcntl
+
+        lock = open(LOCK_PATH, "w")
+        fcntl.flock(lock, fcntl.LOCK_EX)
+    except (ImportError, OSError):
+        # Non-POSIX platform or unwritable directory: proceed without a lock.
+        lock = None
+
+    try:
+        # Another worker may have installed the requirements while we waited.
+        if _is_installed(digest):
+            return
+
+        _log(f"installing {REQUIREMENTS_PATH}")
+        try:
+            result = subprocess.run(
+                [sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "-r", REQUIREMENTS_PATH],
+                capture_output=True,
+                text=True,
+                timeout=TIMEOUT_SECONDS,
+            )
+            returncode = result.returncode
+            output = (result.stdout or "") + (result.stderr or "")
+        except Exception as exc:  # timeout, missing pip, ...
+            returncode = -1
+            output = f"{type(exc).__name__}: {exc}"
+
+        _write_status({
+            "requirements_sha256": digest,
+            "status": "ok" if returncode == 0 else "error",
+            "returncode": returncode,
+            "installed_at": datetime.now(timezone.utc).isoformat(),
+            "output": output[-6000:],
+        })
+        if returncode == 0:
+            _log("requirements installed")
+        else:
+            _log(f"pip failed with exit code {returncode}; see {STATUS_PATH}")
+    finally:
+        if lock is not None:
+            try:
+                import fcntl
+
+                fcntl.flock(lock, fcntl.LOCK_UN)
+            finally:
+                lock.close()
+
+
+if __name__ == "__main__":
+    ensure_dependencies()

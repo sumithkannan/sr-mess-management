@@ -18,6 +18,8 @@ backend/uploads/
 
 # --- Build metadata written by the deploy workflow (never committed) ---
 backend/deploy_stamp.json
+backend/deploy_dependencies.json
+backend/.deploy_dependencies.lock
 
 # --- Node / Frontend ---
 frontend/node_modules/

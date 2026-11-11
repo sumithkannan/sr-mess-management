@@ -1,0 +1,175 @@
+name: Install backend dependencies on PythonAnywhere
+
+# This workflow is independent of "Deploy backend to PythonAnywhere". It runs
+# on its own when backend/requirements.txt changes (or when dispatched
+# manually) and never triggers the deploy workflow, and vice versa.
+#
+# PythonAnywhere's API cannot start a console without a browser, so pip cannot
+# be run directly from CI. Instead the web app installs changed requirements
+# when it starts (backend/deploy_dependencies.py); this workflow reloads the
+# site and waits for the installer to report success.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'backend/requirements.txt'
+  workflow_dispatch:
+
+concurrency:
+  group: install-pythonanywhere-dependencies
+  cancel-in-progress: false
+
+jobs:
+  install:
+    name: Install requirements.txt
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install PythonAnywhere SDK
+        run: pip install --upgrade pythonanywhere-core
+
+      - name: Install requirements on PythonAnywhere
+        env:
+          API_TOKEN: ${{ secrets.PYTHONANYWHERE_API_TOKEN }}
+          PYTHONANYWHERE_USERNAME: ${{ vars.PYTHONANYWHERE_USERNAME }}
+          PYTHONANYWHERE_SITE: ${{ vars.PYTHONANYWHERE_SITE }}
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import sys
+          import time
+          import urllib.error
+          import urllib.request
+
+          from pythonanywhere_core.exceptions import PythonAnywhereApiException
+          from pythonanywhere_core.files import Files
+          from pythonanywhere_core.website import Website
+
+          user = os.environ["PYTHONANYWHERE_USERNAME"].strip()
+          site = os.environ.get("PYTHONANYWHERE_SITE", "").strip() or "www.pythonanywhere.com"
+
+          domain = (
+              f"{user}.eu.pythonanywhere.com"
+              if site.startswith("eu")
+              else f"{user}.pythonanywhere.com"
+          )
+          repo_root = f"/home/{user}/sr-mess-management"
+          requirements_local = "backend/requirements.txt"
+          requirements_remote = f"{repo_root}/backend/requirements.txt"
+          status_remote = f"{repo_root}/backend/deploy_dependencies.json"
+          health_url = f"https://{domain}/api/health"
+
+          with open(requirements_local, "rb") as fh:
+              local_bytes = fh.read()
+          digest = hashlib.sha256(local_bytes).hexdigest()
+
+          files = Files()
+
+          def read_remote(path):
+              try:
+                  data = files.path_get(path)
+              except PythonAnywhereApiException as exc:
+                  print(f"  cannot read {path}: {exc}")
+                  return None
+              # Directories come back as dicts; files as bytes.
+              return data if isinstance(data, bytes) else None
+
+          def read_status():
+              data = read_remote(status_remote)
+              if data is None:
+                  return {}
+              try:
+                  parsed = json.loads(data.decode("utf-8"))
+              except ValueError:
+                  return {}
+              return parsed if isinstance(parsed, dict) else {}
+
+          def poke_health():
+              try:
+                  with urllib.request.urlopen(health_url, timeout=30) as response:
+                      return response.status
+              except (urllib.error.URLError, OSError):
+                  return None
+
+          def reload_site():
+              for attempt in range(1, 4):
+                  try:
+                      Website().reload(domain)
+                      return
+                  except PythonAnywhereApiException as exc:
+                      if "409" in str(exc) and attempt < 3:
+                          print(f"  reload timeout, retrying ({attempt}/3)...", flush=True)
+                          time.sleep(20)
+                          continue
+                      raise
+
+          print(f"username    : {user}")
+          print(f"domain      : {domain}")
+          print(f"requirements: {digest}")
+
+          status = read_status()
+          if status.get("status") == "ok" and status.get("requirements_sha256") == digest:
+              print("::notice::dependencies already installed for this requirements.txt")
+              sys.exit(0)
+
+          # The deploy workflow uploads files, so wait (briefly) until the copy
+          # on PythonAnywhere matches this commit. This keeps the two workflows
+          # independent without ever installing stale requirements.
+          print("waiting for backend/requirements.txt to match this commit...", flush=True)
+          deadline = time.time() + 600
+          while time.time() < deadline:
+              raw = read_remote(requirements_remote)
+              if raw is not None and hashlib.sha256(raw).hexdigest() == digest:
+                  break
+              time.sleep(10)
+          else:
+              sys.exit(
+                  "::error::backend/requirements.txt on PythonAnywhere does not match "
+                  "this commit — run the deploy workflow first"
+              )
+
+          print("reloading web app to trigger the installer...", flush=True)
+          reload_site()
+
+          deadline = time.time() + 900
+          while time.time() < deadline:
+              time.sleep(5)
+              poke_health()  # make sure the app has started
+              status = read_status()
+              if status.get("requirements_sha256") != digest:
+                  continue
+              if status.get("status") == "ok":
+                  print("::notice::dependencies installed successfully")
+                  print(status.get("output", "")[-2000:])
+                  sys.exit(0)
+              print("::error::pip install failed on PythonAnywhere")
+              print(status.get("output", ""))
+              sys.exit(1)
+
+          sys.exit("::error::timed out waiting for the dependency installer")
+          PY
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Backend dependencies"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| requirements | \`backend/requirements.txt\` |"
+            echo "| triggered by | \`${{ github.event_name }}\` |"
+            echo ""
+            echo "> The web app installs changed requirements on reload."
+            echo "> Status is reported in \`backend/deploy_dependencies.json\` on PythonAnywhere."
+          } >> "$GITHUB_STEP_SUMMARY"
