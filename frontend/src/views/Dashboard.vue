@@ -34,7 +34,10 @@
           class="text-sm font-semibold text-gray-800 cursor-pointer select-none">
           {{ formattedDate }}
         </span>
-        <p v-if="!isDateVotingOpen(selectedDate)" class="text-xs text-orange-600">Voting not open</p>
+        <p v-if="dateVotingStatus !== 'open'" class="text-xs"
+          :class="dateVotingStatus === 'upcoming' ? 'text-orange-600' : 'text-gray-500'">
+          {{ dateVotingStatus === 'upcoming' ? 'Voting not open' : 'Voting closed' }}
+        </p>
       </div>
       <button @click="changeDate(1)"
         class="text-lg text-gray-500 hover:text-gray-800 leading-none w-7 text-center">&#8250;</button>
@@ -74,7 +77,11 @@
               Voted ✓
             </button>
           </div>
-          <p class="text-xs text-gray-400 mt-1.5 text-center">Tap to vote</p>
+          <div class="flex items-center justify-between gap-2 mt-1.5 text-xs">
+            <span class="text-gray-400">Tap to vote</span>
+            <span class="font-medium tabular-nums text-green-700">{{ voteCountdown(mt) }}</span>
+          </div>
+          <p class="text-[11px] text-gray-400 mt-0.5 text-center">Vote by {{ voteDeadline(mt) }}</p>
         </template>
         <template v-else>
           <p class="text-sm text-center font-medium"
@@ -111,11 +118,11 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import api from '../api'
 import { useToast } from '../composables/useToast'
 import SkeletonCard from '../components/SkeletonCard.vue'
-import { todayStr, zonedTimestamp, APP_TIMEZONE } from '../utils/time'
+import { todayStr, zonedTimestamp, formatCountdown, APP_TIMEZONE } from '../utils/time'
 
 const toast = useToast()
 const loading = ref(true)
@@ -127,6 +134,10 @@ const myRatings = ref({})
 const hoverRating = reactive({})
 const dutyUsers = ref([])
 const offDays = ref([])
+
+// Ticks once a second so vote badges and countdowns stay live.
+const now = ref(Date.now())
+let nowTimer = null
 
 const offDayToday = computed(() => {
   return offDays.value.find(o => selectedDate.value >= o.start_date && selectedDate.value <= o.end_date) || null
@@ -141,6 +152,27 @@ const formattedDate = computed(() => {
   const d = new Date(selectedDate.value + 'T00:00:00')
   return d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })
 })
+
+// Voting state for the selected date as a whole: 'open' when at least one
+// meal's voting window contains the current time, 'upcoming' when voting for
+// the date has not started yet, otherwise 'closed' (deadline passed).
+function dateVotingStatusOf(dateStr) {
+  if (offDays.value.find(o => dateStr >= o.start_date && dateStr <= o.end_date)) return 'closed'
+  const t = now.value
+  let earliestOpen = null
+  for (const mt of mealTypes.value) {
+    if (!mt.start_time || mt.vote_cutoff_hours == null || mt.vote_open_interval_days == null) continue
+    const open = zonedTimestamp(dateStr) - mt.vote_open_interval_days * 86400000
+    const [h, m] = mt.start_time.split(':').map(Number)
+    const deadline = zonedTimestamp(dateStr, h, m) - mt.vote_cutoff_hours * 3600000
+    if (t >= open && t < deadline) return 'open'
+    if (earliestOpen === null || open < earliestOpen) earliestOpen = open
+  }
+  if (earliestOpen === null) return 'closed'
+  return t < earliestOpen ? 'upcoming' : 'closed'
+}
+
+const dateVotingStatus = computed(() => dateVotingStatusOf(selectedDate.value))
 
 async function loadData() {
   loading.value = true
@@ -170,16 +202,7 @@ async function loadData() {
 }
 
 function isDateVotingOpen(dateStr) {
-  if (offDays.value.find(o => dateStr >= o.start_date && dateStr <= o.end_date)) return false
-  const now = Date.now()
-  for (const mt of mealTypes.value) {
-    if (!mt.start_time || mt.vote_cutoff_hours == null || mt.vote_open_interval_days == null) continue
-    const open = zonedTimestamp(dateStr) - mt.vote_open_interval_days * 86400000
-    const [h, m] = mt.start_time.split(':').map(Number)
-    const deadline = zonedTimestamp(dateStr, h, m) - mt.vote_cutoff_hours * 3600000
-    if (now >= open && now < deadline) return true
-  }
-  return false
+  return dateVotingStatusOf(dateStr) === 'open'
 }
 
 function changeDate(delta) {
@@ -188,6 +211,7 @@ function changeDate(delta) {
 }
 
 onMounted(async () => {
+  nowTimer = setInterval(() => { now.value = Date.now() }, 1000)
   await loadData()
   // ensure we start on a vote-open date if possible
   if (!isDateVotingOpen(selectedDate.value)) {
@@ -197,6 +221,10 @@ onMounted(async () => {
       await loadData()
     }
   }
+})
+
+onUnmounted(() => {
+  if (nowTimer) clearInterval(nowTimer)
 })
 
 function pickDate() {
@@ -246,8 +274,8 @@ function isVotingOpen(mt) {
   if (offDayToday.value) return false
   const win = getVoteWindow(mt)
   if (!win) return false
-  const now = Date.now()
-  return now >= win.open.getTime() && now < win.deadline.getTime()
+  const t = now.value
+  return t >= win.open.getTime() && t < win.deadline.getTime()
 }
 
 function getRatingStart(mt) {
@@ -259,7 +287,7 @@ function getRatingStart(mt) {
 function isRatingOpen(mt) {
   const start = getRatingStart(mt)
   if (!start) return false
-  return Date.now() >= start.getTime()
+  return now.value >= start.getTime()
 }
 
 function cardMuted(mt) {
@@ -275,7 +303,7 @@ function getVotingStatus(mt) {
   if (isVotingOpen(mt)) return 'open'
   const win = getVoteWindow(mt)
   if (!win) return 'closed'
-  return Date.now() < win.open.getTime() ? 'upcoming' : 'closed'
+  return now.value < win.open.getTime() ? 'upcoming' : 'closed'
 }
 
 function votingBadgeClass(mt) {
@@ -292,15 +320,39 @@ function votingBadgeText(mt) {
   return 'Closed'
 }
 
+// "7:00 am", prefixed with the date when it is not the selected date.
+function formatVoteDeadline(date) {
+  const day = date.toLocaleDateString('en-IN', { timeZone: APP_TIMEZONE })
+  const selectedDay = new Date(zonedTimestamp(selectedDate.value)).toLocaleDateString('en-IN', { timeZone: APP_TIMEZONE })
+  const time = date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: APP_TIMEZONE })
+  if (day === selectedDay) return time
+  const label = date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: APP_TIMEZONE })
+  return `${time} on ${label}`
+}
+
+// Time left to vote, based on the deadline computed from the admin settings
+// (meal start minus `vote_cutoff_hours`).
+function voteCountdown(mt) {
+  const win = getVoteWindow(mt)
+  if (!win || !isVotingOpen(mt)) return ''
+  return `Closes in ${formatCountdown(win.deadline.getTime() - now.value)}`
+}
+
+// The computed deadline itself, shown against every meal.
+function voteDeadline(mt) {
+  const win = getVoteWindow(mt)
+  return win ? formatVoteDeadline(win.deadline) : ''
+}
+
 function votingSubtext(mt) {
   const win = getVoteWindow(mt)
   if (!win) return ''
-  const now = Date.now()
-  if (now < win.open.getTime()) {
+  if (offDayToday.value) return 'Mess closed'
+  if (now.value < win.open.getTime()) {
     const opts = { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: APP_TIMEZONE }
     return `Opens ${win.open.toLocaleDateString('en-IN', opts)}`
   }
-  return 'Voting closed'
+  return `Voting closed at ${formatVoteDeadline(win.deadline)}`
 }
 
 function voteBtnClass(mt, isVoteBtn) {
