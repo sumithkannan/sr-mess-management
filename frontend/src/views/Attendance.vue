@@ -106,7 +106,7 @@ import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import api from '../api'
 import { useToast } from '../composables/useToast'
 import { useAuthStore } from '../stores/auth'
-import { todayStr, mealWindow, formatCountdown, APP_TIMEZONE } from '../utils/time'
+import { todayStr, mealWindow, formatCountdown, pickCurrentMealType, APP_TIMEZONE } from '../utils/time'
 
 const auth = useAuthStore()
 const attDate = ref(todayStr())
@@ -126,9 +126,9 @@ const selectedMealTypeObj = computed(() => mealTypes.value.find(m => m.id === +s
 const now = ref(Date.now())
 let nowTimer = null
 
-function getAttendanceWindow(mt) {
+function getAttendanceWindow(mt, dateStr = attDate.value) {
   if (!mt || !mt.start_time || !mt.end_time || mt.attendance_buffer_hours == null) return null
-  return mealWindow(attDate.value, mt.start_time, mt.end_time, mt.attendance_buffer_hours)
+  return mealWindow(dateStr, mt.start_time, mt.end_time, mt.attendance_buffer_hours)
 }
 
 const attendanceWindow = computed(() => getAttendanceWindow(selectedMealTypeObj.value))
@@ -288,7 +288,7 @@ onMounted(async () => {
   try {
     const { data } = await api.get('/api/meal-types')
     mealTypes.value = data
-    if (data.length) selectedMealType.value = String(data[0].id)
+    selectedMealType.value = pickCurrentMealType(data, attDate.value)
   } catch (e) {
     console.error('Attendance init error:', e)
   }
