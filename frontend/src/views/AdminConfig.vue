@@ -19,24 +19,27 @@
         <input type="time" v-model="form.end_time" class="border rounded px-2 py-1 text-sm flex-1" />
       </label>
       <label class="flex items-center gap-2 text-sm">
-        <span class="w-28">Vote cutoff (hrs):</span>
+        <span class="w-28 shrink-0">Vote cutoff (hrs):</span>
         <input type="number" v-model.number="form.vote_cutoff_hours" min="1" max="72"
-          class="border rounded px-2 py-1 text-sm flex-1" />
+          class="border rounded px-2 py-1 text-sm w-20" />
+        <span class="text-xs text-gray-500">{{ voteCutoffHint(form) }}</span>
       </label>
       <label class="flex items-center gap-2 text-sm">
-        <span class="w-28">Vote open (days):</span>
+        <span class="w-28 shrink-0">Vote open (days):</span>
         <input type="number" v-model.number="form.vote_open_interval_days" min="1" max="90"
           class="border rounded px-2 py-1 text-sm flex-1" />
       </label>
       <label class="flex items-center gap-2 text-sm">
-        <span class="w-28">Rating after (hrs):</span>
+        <span class="w-28 shrink-0">Rating after (hrs):</span>
         <input type="number" v-model.number="form.rating_start_hours" min="0" max="72"
-          class="border rounded px-2 py-1 text-sm flex-1" />
+          class="border rounded px-2 py-1 text-sm w-20" />
+        <span class="text-xs text-gray-500">{{ ratingHint(form) }}</span>
       </label>
       <label class="flex items-center gap-2 text-sm">
-        <span class="w-28">Attendance buf (hrs):</span>
+        <span class="w-28 shrink-0">Attendance buf (hrs):</span>
         <input type="number" v-model.number="form.attendance_buffer_hours" min="0" max="24"
-          class="border rounded px-2 py-1 text-sm flex-1" />
+          class="border rounded px-2 py-1 text-sm w-20" />
+        <span class="text-xs text-gray-500">{{ attendanceHint(form) }}</span>
       </label>
       <label class="flex items-center gap-2 text-sm">
         <span class="w-28">Sort order:</span>
@@ -60,24 +63,27 @@
           <input type="time" v-model="mt.end_time" class="border rounded px-2 py-1 text-sm flex-1" />
         </label>
         <label class="flex items-center gap-2">
-          <span class="w-28">Vote cutoff (hrs):</span>
+          <span class="w-28 shrink-0">Vote cutoff (hrs):</span>
           <input type="number" v-model.number="mt.vote_cutoff_hours" min="1" max="72"
-            class="border rounded px-2 py-1 text-sm flex-1" />
+            class="border rounded px-2 py-1 text-sm w-20" />
+          <span class="text-xs text-gray-500">{{ voteCutoffHint(mt) }}</span>
         </label>
         <label class="flex items-center gap-2">
-          <span class="w-28">Vote open (days):</span>
+          <span class="w-28 shrink-0">Vote open (days):</span>
           <input type="number" v-model.number="mt.vote_open_interval_days" min="1" max="90"
             class="border rounded px-2 py-1 text-sm flex-1" />
         </label>
         <label class="flex items-center gap-2">
-          <span class="w-28">Rating after (hrs):</span>
+          <span class="w-28 shrink-0">Rating after (hrs):</span>
           <input type="number" v-model.number="mt.rating_start_hours" min="0" max="72"
-            class="border rounded px-2 py-1 text-sm flex-1" />
+            class="border rounded px-2 py-1 text-sm w-20" />
+          <span class="text-xs text-gray-500">{{ ratingHint(mt) }}</span>
         </label>
         <label class="flex items-center gap-2">
-          <span class="w-28">Attendance buf (hrs):</span>
+          <span class="w-28 shrink-0">Attendance buf (hrs):</span>
           <input type="number" v-model.number="mt.attendance_buffer_hours" min="0" max="24"
-            class="border rounded px-2 py-1 text-sm flex-1" />
+            class="border rounded px-2 py-1 text-sm w-20" />
+          <span class="text-xs text-gray-500">{{ attendanceHint(mt) }}</span>
         </label>
       </div>
       <button @click="updateMealType(mt)" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm">Save</button>
@@ -130,6 +136,7 @@ const toast = useToast()
 import { ref, onMounted } from 'vue'
 import api from '../api'
 import { useToast } from '../composables/useToast'
+import { clockMinutes, describeClockOffset } from '../utils/time'
 
 const mealTypes = ref([])
 const showForm = ref(false)
@@ -143,6 +150,44 @@ function normalizeTime(mealTypes) {
     mt.start_time = mt.start_time?.substring(0, 5)
     mt.end_time = mt.end_time?.substring(0, 5)
   }
+}
+
+const DAY_MINUTES = 24 * 60
+
+function hoursValue(value) {
+  if (value === '' || value === null || value === undefined) return null
+  const hours = Number(value)
+  return Number.isFinite(hours) ? hours : null
+}
+
+// Votes close this long before the meal starts, e.g. 09:00 with 14 hrs
+// closes at 7:00 PM the previous day.
+function voteCutoffHint(mt) {
+  const start = clockMinutes(mt.start_time)
+  const hours = hoursValue(mt.vote_cutoff_hours)
+  if (start == null || hours == null) return ''
+  return `→ ${describeClockOffset(start - hours * 60)}`
+}
+
+// Ratings open this long after the meal ends.
+function ratingHint(mt) {
+  const end = clockMinutes(mt.end_time)
+  const hours = hoursValue(mt.rating_start_hours)
+  if (end == null || hours == null) return ''
+  return `→ ${describeClockOffset(end + hours * 60)}`
+}
+
+// Attendance is accepted from `buffer` before the start until `buffer` after
+// the end (the backend also rolls a meal that crosses midnight to the next day).
+function attendanceHint(mt) {
+  const start = clockMinutes(mt.start_time)
+  const end = clockMinutes(mt.end_time)
+  const hours = hoursValue(mt.attendance_buffer_hours) ?? 1
+  if (start == null || end == null) return ''
+  const open = start - hours * 60
+  let close = end + hours * 60
+  if (close <= open) close += DAY_MINUTES
+  return `→ ${describeClockOffset(open)} – ${describeClockOffset(close)}`
 }
 
 async function load() {
