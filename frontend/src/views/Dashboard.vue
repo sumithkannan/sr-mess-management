@@ -177,23 +177,14 @@ const dateVotingStatus = computed(() => dateVotingStatusOf(selectedDate.value))
 async function loadData() {
   loading.value = true
   try {
-    const [mtRes, miRes, vRes, rRes, dutyRes, offRes] = await Promise.all([
-      api.get('/api/meal-types'),
-      api.get(`/api/menu-items/date/${selectedDate.value}`),
-      api.get(`/api/votes/my/${selectedDate.value}`),
-      api.get(`/api/ratings/my/${selectedDate.value}`),
-      api.get('/api/mess-duty/current'),
-      api.get('/api/off-days')
-    ])
-    mealTypes.value = mtRes.data.filter(m => m.is_active)
-    menuItems.value = miRes.data
-    votes.value = vRes.data
+    const { data } = await api.get('/api/dashboard', { params: { date: selectedDate.value } })
+    mealTypes.value = (data.meal_types || []).filter(m => m.is_active)
+    menuItems.value = data.menu_items || []
+    votes.value = data.my_votes || []
     myRatings.value = {}
-    for (const r of rRes.data) {
-      myRatings.value[r.menu_item_id] = r.rating
-    }
-    dutyUsers.value = dutyRes.data.map(d => d.name)
-    offDays.value = offRes.data
+    for (const r of (data.my_ratings || [])) myRatings.value[r.menu_item_id] = r.rating
+    dutyUsers.value = (data.mess_duty || []).map(d => d.name)
+    offDays.value = data.off_days || []
   } catch (e) {
     console.error('Dashboard load error:', e)
   } finally {
