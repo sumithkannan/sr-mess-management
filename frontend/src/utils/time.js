@@ -74,7 +74,8 @@ export function formatCountdown(ms) {
 
 // Pick the meal that is relevant right now: the first one whose attendance
 // window (including its buffer) contains `nowMs`, otherwise the next window to
-// open, otherwise the first meal. `mealTypes` must be in display order.
+// open, otherwise the meal whose window ended most recently. `mealTypes` must
+// be in display order, which also breaks ties.
 export function pickCurrentMealType(mealTypes, dateStr, nowMs = Date.now()) {
   const windowOf = mt => (
     mt && mt.start_time && mt.end_time && mt.attendance_buffer_hours != null
@@ -90,6 +91,14 @@ export function pickCurrentMealType(mealTypes, dateStr, nowMs = Date.now()) {
     .filter(x => x.w && x.w.start.getTime() > nowMs)
     .sort((a, b) => a.w.start - b.w.start)
   if (upcoming.length) return String(upcoming[0].mt.id)
+
+  // Every window is in the past: stay on the last meal served, not the first.
+  let lastEnded = null
+  for (const x of windows) {
+    if (!x.w) continue
+    if (!lastEnded || x.w.end.getTime() > lastEnded.w.end.getTime()) lastEnded = x
+  }
+  if (lastEnded) return String(lastEnded.mt.id)
 
   return mealTypes.length ? String(mealTypes[0].id) : ''
 }

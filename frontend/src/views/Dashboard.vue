@@ -377,6 +377,4 @@ async function submitRating(mt, rating) {
     hoverRating[itemId] = 0
   } catch (e) { toast.error(e.response?.data?.detail || 'Error') }
 }
-
-onMounted(loadData)
 </script>
