@@ -58,3 +58,16 @@ export function describeClockOffset(minutes) {
   if (day === 1) return `${clock} next day`
   return day < 0 ? `${clock} ${-day} days before` : `${clock} ${day} days after`
 }
+
+// Milliseconds -> compact countdown: "2d 3h 15m", "3h 15m 20s", "15m 20s", "9s".
+export function formatCountdown(ms) {
+  const total = Math.max(0, Math.ceil(ms / 1000))
+  const days = Math.floor(total / 86400)
+  const hours = Math.floor((total % 86400) / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const seconds = total % 60
+  if (days > 0) return `${days}d ${hours}h ${minutes}m`
+  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`
+  if (minutes > 0) return `${minutes}m ${seconds}s`
+  return `${seconds}s`
+}

@@ -15,14 +15,20 @@
     </div>
 
     <template v-if="selectedMealType">
-      <div class="flex items-center justify-between">
+      <div class="flex items-start justify-between gap-2">
         <span class="text-xs px-2.5 py-1 rounded-full font-medium"
           :class="isAttendanceOpen ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'">
           {{ isAttendanceOpen ? 'Attendance Open' : 'Attendance Closed' }}
         </span>
-        <span v-if="selectedMealTypeObj && !isAttendanceOpen" class="text-xs text-gray-400">
-          Opens {{ attendanceWindowStart }}
-        </span>
+        <div v-if="attendanceWindow" class="text-right leading-tight">
+          <div class="text-xs font-medium tabular-nums"
+            :class="isAttendanceOpen ? 'text-green-700' : 'text-gray-500'">
+            {{ windowCountdown }}
+          </div>
+          <div class="text-[11px] text-gray-400 tabular-nums">
+            {{ attendanceWindowStart }} – {{ attendanceWindowEnd }}
+          </div>
+        </div>
       </div>
 
       <div class="flex gap-2">
@@ -96,11 +102,11 @@
 
 <script setup>
 const toast = useToast()
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import api from '../api'
 import { useToast } from '../composables/useToast'
 import { useAuthStore } from '../stores/auth'
-import { todayStr, mealWindow, APP_TIMEZONE } from '../utils/time'
+import { todayStr, mealWindow, formatCountdown, APP_TIMEZONE } from '../utils/time'
 
 const auth = useAuthStore()
 const attDate = ref(todayStr())
@@ -116,6 +122,10 @@ const pageSize = 50
 
 const selectedMealTypeObj = computed(() => mealTypes.value.find(m => m.id === +selectedMealType.value))
 
+// Ticks once a second so the open/closed badge and the countdown stay live.
+const now = ref(Date.now())
+let nowTimer = null
+
 function getAttendanceWindow(mt) {
   if (!mt || !mt.start_time || !mt.end_time || mt.attendance_buffer_hours == null) return null
   return mealWindow(attDate.value, mt.start_time, mt.end_time, mt.attendance_buffer_hours)
@@ -125,15 +135,38 @@ const attendanceWindow = computed(() => getAttendanceWindow(selectedMealTypeObj.
 
 const isAttendanceOpen = computed(() => {
   if (!attendanceWindow.value) return false
-  const now = Date.now()
-  return now >= attendanceWindow.value.start.getTime() && now < attendanceWindow.value.end.getTime()
+  return now.value >= attendanceWindow.value.start.getTime() && now.value < attendanceWindow.value.end.getTime()
 })
+
+// All window math uses epoch timestamps built by mealWindow(), so the
+// countdown follows the same fixed +05:30 offset as the rest of the UI.
+function formatWindowTime(date) {
+  return date.toLocaleTimeString('en-IN', {
+    hour: '2-digit', minute: '2-digit', timeZone: APP_TIMEZONE
+  })
+}
 
 const attendanceWindowStart = computed(() => {
   if (!attendanceWindow.value) return ''
-  return attendanceWindow.value.start.toLocaleTimeString('en-IN', {
-    hour: '2-digit', minute: '2-digit', timeZone: APP_TIMEZONE
-  })
+  return formatWindowTime(attendanceWindow.value.start)
+})
+
+const attendanceWindowEnd = computed(() => {
+  const w = attendanceWindow.value
+  if (!w) return ''
+  const sameDay = w.start.toLocaleDateString('en-IN', { timeZone: APP_TIMEZONE })
+    === w.end.toLocaleDateString('en-IN', { timeZone: APP_TIMEZONE })
+  return formatWindowTime(w.end) + (sameDay ? '' : ' next day')
+})
+
+const windowCountdown = computed(() => {
+  const w = attendanceWindow.value
+  if (!w) return ''
+  const start = w.start.getTime()
+  const end = w.end.getTime()
+  if (now.value >= end) return 'Window ended'
+  if (now.value >= start) return `Closes in ${formatCountdown(end - now.value)}`
+  return `Opens in ${formatCountdown(start - now.value)}`
 })
 
 const filters = [
@@ -251,6 +284,7 @@ function downloadCSV() {
 }
 
 onMounted(async () => {
+  nowTimer = setInterval(() => { now.value = Date.now() }, 1000)
   try {
     const { data } = await api.get('/api/meal-types')
     mealTypes.value = data
@@ -258,5 +292,9 @@ onMounted(async () => {
   } catch (e) {
     console.error('Attendance init error:', e)
   }
+})
+
+onUnmounted(() => {
+  if (nowTimer) clearInterval(nowTimer)
 })
 </script>
