@@ -157,31 +157,27 @@ function recurringFieldDirty(mtId, dow) {
 
 async function loadMenu() {
   try {
-    const [mt, di, ri] = await Promise.all([
-      api.get('/api/meal-types'),
-      api.get(`/api/menu-items/date/${viewDate.value}`),
-      api.get('/api/menu-items/recurring')
-    ])
-    mealTypes.value = mt.data
-    dateItems.value = di.data.filter(item => item.date !== null)
-    recurringItems.value = ri.data
+    const { data } = await api.get('/api/menu/dashboard', { params: { date: viewDate.value } })
+    mealTypes.value = data.meal_types
+    dateItems.value = (data.date_items || []).filter(item => item.date !== null)
+    recurringItems.value = data.recurring_items
     dateSaved.value = false
     recurringSaved.value = false
 
-    for (const mtItem of mt.data) {
+    for (const mtItem of data.meal_types) {
       const item = dateItems.value.find(i => i.meal_type_id === mtItem.id)
       const name = item ? item.item_name : ''
       dateOriginals[mtItem.id] = name
       dateDrafts[mtItem.id] = name
     }
 
-    for (const item of ri.data) {
+    for (const item of data.recurring_items) {
       const key = item.meal_type_id + '-' + item.day_of_week
       recurringInputs[key] = item.item_name
       recurringOriginals[key] = item.item_name
     }
 
-    for (const mtItem of mt.data) {
+    for (const mtItem of data.meal_types) {
       for (let di = 0; di < 7; di++) {
         const key = mtItem.id + '-' + di
         if (!(key in recurringOriginals)) {

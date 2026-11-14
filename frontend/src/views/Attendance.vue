@@ -216,16 +216,13 @@ async function loadUsers() {
   if (!selectedMealType.value) return
   page.value = 1
   try {
-    const [uRes, aRes, vRes, dutyRes] = await Promise.all([
-      api.get('/api/users/active'),
-      api.get(`/api/attendance/date/${attDate.value}/${selectedMealType.value}`),
-      api.get(`/api/votes/date/${attDate.value}`),
-      api.get('/api/mess-duty/current').catch(() => ({ data: [] }))
-    ])
-    attendanceList.value = aRes.data
-    const votedIds = new Set(vRes.data.filter(v => v.meal_type_id === +selectedMealType.value).map(v => v.user_id))
-    users.value = uRes.data.filter(u => votedIds.has(u.id)).map(u => ({ ...u, voted: true }))
-    hasDuty.value = dutyRes.data.some(d => d.id === auth.user?.id)
+    const { data } = await api.get('/api/attendance/dashboard', {
+      params: { date: attDate.value, meal_type_id: selectedMealType.value }
+    })
+    attendanceList.value = data.attendance
+    const votedIds = new Set(data.votes.filter(v => v.meal_type_id === +selectedMealType.value).map(v => v.user_id))
+    users.value = data.users.filter(u => votedIds.has(u.id)).map(u => ({ ...u, voted: true }))
+    hasDuty.value = data.mess_duty.some(d => d.id === auth.user?.id)
   } catch (e) {
     console.error('Attendance load error:', e)
   }

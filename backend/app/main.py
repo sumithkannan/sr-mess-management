@@ -21,7 +21,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect, text
 from .database import engine, Base
-from .api import auth, users, menu, votes, attendance, ratings, mess_duty, expenses, reports, configurations, off_days, version, dashboard
+from .api import auth, users, menu, votes, attendance, ratings, mess_duty, expenses, reports, configurations, off_days, version, dashboard, menu_agg, attendance_agg
 from .services.auth_service import seed_admin
 from .config import settings
 
@@ -75,6 +75,8 @@ app.include_router(reports.router)
 app.include_router(configurations.router)
 app.include_router(off_days.router)
 app.include_router(dashboard.router)
+app.include_router(menu_agg.router)
+app.include_router(attendance_agg.router)
 app.include_router(version.router)
 
 os.makedirs("uploads/expenses", exist_ok=True)

@@ -73,8 +73,8 @@ async function loadReport(key) {
     })
     if (!data.length) { noData.value = true; reportData.value = []; return }
     if (key === 'vote_vs_attendance') {
-      reportHeaders.value = ['Name', 'Voted', 'Ate']
-      reportData.value = data.map(d => [d.name, d.voted ? 'Yes' : 'No', d.ate ? 'Yes' : 'No'])
+      reportHeaders.value = ['Date', 'Meal', 'Name', 'Voted', 'Ate']
+      reportData.value = data.map(d => [d.date, d.meal_type, d.name, d.voted ? 'Yes' : 'No', d.ate ? 'Yes' : 'No'])
     } else if (key === 'meal_summary') {
       reportHeaders.value = ['Meal', 'Date', 'Votes', 'Served']
       reportData.value = data.map(d => [d.meal_type, d.date, d.votes, d.served])

@@ -12,22 +12,34 @@ router = APIRouter(prefix="/api/reports", tags=["Reports"])
 def vote_vs_attendance(date_from: date, date_to: date, meal_type_id: int = None,
                        db: Session = Depends(get_db), admin=Depends(admin_required)):
     query = """
-    SELECT u.id, u.name,
+    SELECT x.rdate, mt.name, u.name,
            CASE WHEN v.id IS NOT NULL THEN 1 ELSE 0 END as voted,
            CASE WHEN a.id IS NOT NULL THEN 1 ELSE 0 END as ate
-    FROM users u
-    LEFT JOIN votes v ON v.user_id = u.id AND v.vote_date BETWEEN :dfrom AND :dto
-    LEFT JOIN attendance a ON a.user_id = u.id AND a.date BETWEEN :dfrom AND :dto
-    WHERE u.is_active = 1
+    FROM (
+        SELECT DISTINCT vote_date AS rdate, meal_type_id, user_id
+        FROM votes
+        WHERE vote_date BETWEEN :dfrom AND :dto
+        UNION
+        SELECT DISTINCT date AS rdate, meal_type_id, user_id
+        FROM attendance
+        WHERE date BETWEEN :dfrom AND :dto
+    ) x
+    JOIN users u ON u.id = x.user_id AND u.is_active = 1
+    JOIN meal_types mt ON mt.id = x.meal_type_id
+    LEFT JOIN votes v
+           ON v.user_id = x.user_id AND v.meal_type_id = x.meal_type_id AND v.vote_date = x.rdate
+    LEFT JOIN attendance a
+           ON a.user_id = x.user_id AND a.meal_type_id = x.meal_type_id AND a.date = x.rdate
+    WHERE 1=1
     """
     params = {"dfrom": date_from, "dto": date_to}
     if meal_type_id:
-        query += " AND (v.meal_type_id = :mt OR v.meal_type_id IS NULL)"
-        query += " AND (a.meal_type_id = :mt OR a.meal_type_id IS NULL)"
+        query += " AND x.meal_type_id = :mt"
         params["mt"] = meal_type_id
-    query += " ORDER BY u.name"
+    query += " ORDER BY x.rdate, mt.sort_order, mt.name, u.name"
     result = db.execute(text(query), params)
-    rows = [{"id": r[0], "name": r[1], "voted": bool(r[2]), "ate": bool(r[3])} for r in result]
+    rows = [{"date": str(r[0]), "meal_type": r[1], "name": r[2],
+             "voted": bool(r[3]), "ate": bool(r[4])} for r in result]
     return rows
 
 @router.get("/meal-summary")
@@ -101,8 +113,8 @@ def export_pdf(report_type: str, date_from: date, date_to: date,
 
     if report_type == "vote_vs_attendance":
         data = vote_vs_attendance(date_from, date_to, meal_type_id, db, admin)
-        headers = ["Name", "Voted", "Ate"]
-        rows = [[d["name"], "Yes" if d["voted"] else "No", "Yes" if d["ate"] else "No"] for d in data]
+        headers = ["Date", "Meal Type", "Name", "Voted", "Ate"]
+        rows = [[d["date"], d["meal_type"], d["name"], "Yes" if d["voted"] else "No", "Yes" if d["ate"] else "No"] for d in data]
     elif report_type == "meal_summary":
         data = meal_summary(date_from, date_to, db, admin)
         headers = ["Meal Type", "Date", "Votes", "Served"]
